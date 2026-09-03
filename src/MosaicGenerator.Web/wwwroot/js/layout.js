@@ -1,8 +1,8 @@
-// Shows what a panel size will actually yield before anything is uploaded: which tessera and
-// joint the generator will pick, how many modules that is, and how much is left over as margin.
+// Shows what a panel size will actually yield before anything is uploaded: the tessera and joint
+// for the chosen bite length, how many modules that is, and how much is left over as margin.
 //
-// The module range, the joint rule and the detail targets all arrive from the server as data.
-// Only the arithmetic is repeated here, and it is the same arithmetic as MosaicLayout.FitCount.
+// The module range and the joint rule arrive from the server as data. Only the arithmetic is
+// repeated here, and it is the same arithmetic as MosaicLayout.FitCount.
 (function () {
     'use strict';
 
@@ -24,39 +24,42 @@
         return Math.floor((panelMm + groutMm) / (moduleMm + groutMm) + FIT_EPSILON);
     }
 
-    function target() {
+    function chosenModule() {
         var checked = form.querySelector('[data-detail]:checked');
-        return checked ? data.targets[checked.value] : 0;
-    }
+        if (!checked) {
+            return null;
+        }
 
-    // Closest to the requested count across the short side, ties going to the finer module:
-    // falling short of the requested detail is the failure worth avoiding.
-    function choose(panelWidthMm, panelHeightMm) {
-        var shortSide = Math.min(panelWidthMm, panelHeightMm);
-        var wanted = target();
-        var best = null;
-
+        var along = parseFloat(checked.value);
+        var match = null;
         data.modules.forEach(function (option) {
-            var columns = fitCount(panelWidthMm, option.m, option.g);
-            var rows = fitCount(panelHeightMm, option.m, option.g);
-            if (columns < 1 || rows < 1 || columns * rows > data.maxModules) {
-                return;
-            }
-
-            var across = fitCount(shortSide, option.m, option.g);
-            if (best === null || Math.abs(across - wanted) < Math.abs(best.across - wanted)) {
-                best = {
-                    module: option.m,
-                    grout: option.g,
-                    columns: columns,
-                    rows: rows,
-                    across: across,
-                    wanted: wanted
-                };
+            if (option.m === along) {
+                match = option;
             }
         });
 
-        return best;
+        return match;
+    }
+
+    // The panel's grid for exactly the bite length the mosaicist picked — no search, no
+    // substitution. If it does not fit, that is reported rather than silently traded for another.
+    function choose(panelWidthMm, panelHeightMm) {
+        var option = chosenModule();
+        if (!option) {
+            return null;
+        }
+
+        var shortSide = Math.min(panelWidthMm, panelHeightMm);
+        var columns = fitCount(panelWidthMm, option.m, option.g);
+        var rows = fitCount(panelHeightMm, option.m, option.g);
+
+        return {
+            module: option.m,
+            grout: option.g,
+            columns: columns,
+            rows: rows,
+            across: fitCount(shortSide, option.m, option.g)
+        };
     }
 
     function ru(value, digits) {
@@ -77,8 +80,24 @@
 
         var choice = choose(panelWidthMm, panelHeightMm);
         if (!choice) {
-            readout.hidden = false;
-            readout.textContent = 'Для такого панно не находится рабочего модуля.';
+            readout.hidden = true;
+            return;
+        }
+
+        readout.hidden = false;
+
+        if (choice.columns < 1 || choice.rows < 1) {
+            readout.textContent =
+                'Модуль ' + ru(choice.module, 1) + ' мм больше панно — ни один модуль не поместится.';
+            announceAspect(panelWidthMm / panelHeightMm);
+            return;
+        }
+
+        var total = choice.columns * choice.rows;
+        if (total > data.maxModules) {
+            readout.textContent =
+                'При таком откусе получается ' + ru(total) + ' модулей, максимум ' +
+                ru(data.maxModules) + '. Увеличьте откус или уменьшите панно.';
             announceAspect(panelWidthMm / panelHeightMm);
             return;
         }
@@ -90,17 +109,10 @@
         var text =
             'Модуль ' + ru(choice.module, 1) + ' мм, шов ' + ru(choice.grout, 1) + ' мм. ' +
             'Сетка ' + choice.columns + ' × ' + choice.rows + ' = ' +
-            ru(choice.columns * choice.rows) + ' модулей, ' +
-            choice.across + ' по короткой стороне';
-
-        if (choice.across < choice.wanted) {
-            text += ' (запрошено ' + choice.wanted + ')';
-        }
-
-        text += '. Поля ' + ru((panelWidthMm - fieldWidth) / 2, 1) + ' и ' +
+            ru(total) + ' модулей, ' + choice.across + ' по короткой стороне' +
+            '. Поля ' + ru((panelWidthMm - fieldWidth) / 2, 1) + ' и ' +
             ru((panelHeightMm - fieldHeight) / 2, 1) + ' мм.';
 
-        readout.hidden = false;
         readout.textContent = text;
 
         // The crop follows the field, not the panel: the margin would otherwise stretch the

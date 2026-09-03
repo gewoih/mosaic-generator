@@ -18,24 +18,20 @@
 <fieldset class="field-group">
     <legend>Укладка</legend>
     <div class="field field--wide">
-        <span class="field__label">Детализация</span>
+        <span class="field__label">Минимальная длина откуса, мм</span>
         <div class="levels">
-            @foreach (DetailLevel level in Enum.GetValues<DetailLevel>())
+            @foreach (double module in ModuleSelector.AvailableModulesMm)
             {
                 <label class="level">
-                    <input type="radio" name="Detail" value="@level" data-detail
-                           checked="@(Model.Form.Detail == level)" />
+                    <input type="radio" name="ModuleAlongMm" value="@module.ToString(CultureInfo.InvariantCulture)"
+                           data-detail
+                           checked="@(Model.Form.ModuleAlongMm.Equals(module))" />
                     <span class="level__body">
-                        <strong>@DetailLevelPresentation.Label(level)</strong>
-                        <span>@level.TargetAcross() модулей по короткой стороне</span>
-                        <span class="level__hint">@DetailLevelPresentation.Hint(level)</span>
+                        <strong>@module.ToString("0.#", CultureInfo.InvariantCulture) мм</strong>
                     </span>
                 </label>
             }
         </div>
-        <span class="field__hint">
-            Размер модуля и шва подбираются под панно автоматически из ряда 5…20 мм.
-        </span>
     </div>
 </fieldset>
 

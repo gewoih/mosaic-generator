@@ -14,7 +14,7 @@ using MosaicGenerator.Core.Skia;
 namespace MosaicGenerator.Diag;
 
 /// <summary>
-/// Runs one photograph through the whole pipeline over a matrix of panel sizes and detail levels,
+/// Runs one photograph through the whole pipeline over a matrix of panel sizes and bite lengths,
 /// writes every preview and scheme out as PNG, and measures what the eye cannot count. A layout
 /// that looks right on a synthetic disc says nothing about a photograph, and there was no way to
 /// get numbers out of the web app.
@@ -22,8 +22,8 @@ namespace MosaicGenerator.Diag;
 internal static class Program
 {
     private sealed record Run(
-        string Name, double WidthCm, double HeightCm, DetailLevel Level, double AnchorX, int MaxColors,
-        double? ForcedModuleMm, bool CompensateJoint);
+        string Name, double WidthCm, double HeightCm, double AlongMm, double AnchorX, int MaxColors,
+        bool CompensateJoint);
 
     private static int Main(string[] args)
     {
@@ -42,15 +42,12 @@ internal static class Program
                 return (double.Parse(parts[0], CultureInfo.InvariantCulture),
                         double.Parse(parts[1], CultureInfo.InvariantCulture));
             })];
-        double?[] forcedModules = Arg(args, "--modules") is { } m
-            ? [.. m.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                   .Select(x => (double?)double.Parse(x, CultureInfo.InvariantCulture))]
-            : [null];
+        double[] modules = [.. (Arg(args, "--modules")
+                ?? string.Join(',', ModuleSelector.AvailableModulesMm.Select(m => m.ToString(CultureInfo.InvariantCulture))))
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => double.Parse(x, CultureInfo.InvariantCulture))];
         bool[] jointModes = args.Contains("--both-joint") ? [true, false]
             : args.Contains("--nojoint") ? [false] : [true];
-        DetailLevel[] levels = [.. (Arg(args, "--levels") ?? string.Join(',', Enum.GetNames<DetailLevel>()))
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Enum.Parse<DetailLevel>)];
 
         // Which ΔE the palette matcher runs on for this whole invocation. Everything the bench
         // *measures* stays on CIE76, so two runs — one per metric — are scored by the same ruler.
@@ -65,7 +62,7 @@ internal static class Program
         {
             Console.Error.WriteLine(
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
-                "[--sizes 15x15,30x30] [--levels Draft,Standard] [--crops 0.5,0.35] " +
+                "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
                 "[--metric cie76|ciede2000]");
             return 1;
         }
@@ -102,30 +99,23 @@ internal static class Program
         var runs = new List<Run>();
         foreach ((double w, double h) in sizes)
         {
-            foreach (DetailLevel level in levels)
+            foreach (double along in modules)
             {
                 foreach (int colors in colorCeilings)
                 {
                     foreach (double anchor in anchors)
                     {
-                        foreach (double? module in forcedModules)
+                        foreach (bool joint in jointModes)
                         {
-                            foreach (bool joint in jointModes)
-                            {
-                                // Invariant, and no decimal comma: a name like "21,7x29" would
-                                // split the CSV row it is written into.
-                                string name = string.Create(CultureInfo.InvariantCulture,
-                                    $"{w:0.#}x{h:0.#}")
-                                    + (module is { } mm
-                                        ? string.Create(CultureInfo.InvariantCulture, $"-m{mm:0.#}")
-                                        : $"-{level}")
-                                    + $"-c{colors}"
-                                    + (anchors.Length > 1
-                                        ? string.Create(CultureInfo.InvariantCulture, $"-x{anchor:0.00}")
-                                        : string.Empty)
-                                    + (jointModes.Length > 1 ? (joint ? "-joint" : "-nojoint") : string.Empty);
-                                runs.Add(new Run(name, w, h, level, anchor, colors, module, joint));
-                            }
+                            // Invariant, and no decimal comma: a name like "21,7x29" would
+                            // split the CSV row it is written into.
+                            string name = string.Create(CultureInfo.InvariantCulture,
+                                $"{w:0.#}x{h:0.#}-m{along:0.#}-c{colors}")
+                                + (anchors.Length > 1
+                                    ? string.Create(CultureInfo.InvariantCulture, $"-x{anchor:0.00}")
+                                    : string.Empty)
+                                + (jointModes.Length > 1 ? (joint ? "-joint" : "-nojoint") : string.Empty);
+                            runs.Add(new Run(name, w, h, along, anchor, colors, joint));
                         }
                     }
                 }
@@ -134,7 +124,7 @@ internal static class Program
 
         var csv = new StringBuilder();
         csv.AppendLine(string.Join(',',
-            "run", "metric", "panel", "level", "along", "across", "grout", "across", "target", "limit", "nominal",
+            "run", "metric", "panel", "along", "across", "grout", "acrossCount", "nominal",
             "tesserae", "ratio", "cut", "overlap", "covered", "bareR", "bare03",
             "areaMin", "areaP5", "areaMed", "areaP95", "areaMax", "tiny", "sliver", "manySided",
             "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "uncuttable", "awkward", "structureOff", "edgesCrossed",
@@ -143,17 +133,8 @@ internal static class Program
 
         foreach (Run run in runs)
         {
-            ModuleChoice chosen = ModuleSelector.Choose(
-                run.WidthCm * 10.0, run.HeightCm * 10.0, run.Level,
-                options.ValidationLimits.MaxModules, palette.TypicalThicknessMm);
-            ModuleChoice choice = run.ForcedModuleMm is { } forced
-                ? chosen with
-                {
-                    ModuleAlongMm = forced,
-                    ModulesAcrossShortSide = MosaicLayout.FitCount(
-                        Math.Min(run.WidthCm, run.HeightCm) * 10.0, forced, chosen.GroutMm),
-                }
-                : chosen;
+            ModuleChoice choice = ModuleSelector.Choose(
+                run.WidthCm * 10.0, run.HeightCm * 10.0, run.AlongMm, palette.TypicalThicknessMm);
 
             var request = new MosaicRequest
             {
@@ -355,11 +336,8 @@ internal static class Program
                 run.Name,
                 ColorDistance.MatchingMetric.ToString(),
                 string.Create(CultureInfo.InvariantCulture, $"{run.WidthCm:0.#}x{run.HeightCm:0.#}"),
-                run.Level.ToString(),
                 N(choice.ModuleAlongMm), N(choice.ModuleAcrossMm), N(choice.GroutMm),
                 choice.ModulesAcrossShortSide.ToString(CultureInfo.InvariantCulture),
-                choice.RequestedAcross.ToString(CultureInfo.InvariantCulture),
-                choice.Limit.ToString(),
                 layout.TotalModules.ToString(CultureInfo.InvariantCulture),
                 tesserae.Count.ToString(CultureInfo.InvariantCulture),
                 N((double)tesserae.Count / layout.TotalModules),
@@ -384,7 +362,7 @@ internal static class Program
 
             Console.WriteLine(
                 $"{run.Name,-26} кусок {choice.ModuleAlongMm,2:0}×{choice.ModuleAcrossMm:0}мм {choice.ModulesAcrossShortSide,3} поперёк " +
-                $"(просили {choice.RequestedAcross,3}, {choice.Limit})  тессер {tesserae.Count,6} " +
+                $"тессер {tesserae.Count,6} " +
                 $"({(double)tesserae.Count / layout.TotalModules:0.00}×)  перекр {mask.OverlappedFraction():P2}  " +
                 $"голое>0,3м {mask.BareBeyond(layout.ModuleWidthMm * 0.3):P2}  дыра {bareR / layout.ModuleWidthMm:0.00}м  " +
                 $"узкая сторона p5 {shape.MinSideP5:0.0}мм  неколибельных {shape.UncuttableShare:P1}  излом {shape.KinkShare:P1}  " +

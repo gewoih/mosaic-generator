@@ -10,8 +10,7 @@
 <section class="summary">
     <dl>
         <div><dt>Панно</dt><dd>@((stored.PanelWidthMm / 10).ToString("0.#", ru)) × @((stored.PanelHeightMm / 10).ToString("0.#", ru)) см</dd></div>
-        <div><dt>Сетка</dt><dd>@stored.Columns × @stored.Rows = @stored.TotalModules.ToString("N0", ru) модулей</dd></div>
-        <div><dt>Детализация</dt><dd>@stored.DetailLevel, @stored.ActualAcross модулей по короткой стороне</dd></div>
+        <div><dt>Сетка</dt><dd>@stored.Columns × @stored.Rows = @stored.TotalModules.ToString("N0", ru) модулей, @stored.ActualAcross по короткой стороне</dd></div>
         <div><dt>Модуль / шов</dt><dd>@stored.ModuleSizeMm.ToString("0.#", ru) мм / @stored.GroutWidthMm.ToString("0.#", ru) мм</dd></div>
         <div>
             <dt>Шов в работе</dt>
@@ -34,10 +33,6 @@
         <div><dt>Запас</dt><dd>@stored.WastePercent.ToString("0.#", ru) %</dd></div>
         <div><dt>Цена материала</dt><dd>@stored.PricePerKgRub.ToString("N0", ru) ₽/кг</dd></div>
     </dl>
-    @if (!string.IsNullOrEmpty(stored.LimitNote))
-    {
-        <p class="summary__warning">@stored.LimitNote</p>
-    }
     @if (stored.StoppedAtPinnedColors)
     {
         <p class="summary__warning">

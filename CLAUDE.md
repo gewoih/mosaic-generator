@@ -35,7 +35,7 @@ dotnet run --project src/MosaicGenerator.Web   # http://localhost:5199
 # Диагностический прогон одной фотографии
 dotnet run -c Release --project tools/MosaicGenerator.Diag -- \
     --photo samples/gull.jpg --out diag-out/gull \
-    --sizes 15x15,21x29.7,30x30 --levels Draft --colors 12 --gamut
+    --sizes 15x15,21x29.7,30x30 --modules 10 --colors 12 --gamut
 ```
 
 ## Предметная область

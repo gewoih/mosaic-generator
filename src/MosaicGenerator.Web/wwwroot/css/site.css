@@ -248,8 +248,6 @@ input[type="number"]:focus-visible, select:focus-visible, input[type="file"]:foc
 
 .level input { margin-top: 0.25rem; }
 .level__body { display: flex; flex-direction: column; gap: 0.125rem; font-size: 0.875rem; }
-.level__body span { color: var(--ink-soft); font-size: 0.8125rem; }
-.level__hint { font-style: italic; }
 
 .summary__warning {
     margin: 1rem 0 0;

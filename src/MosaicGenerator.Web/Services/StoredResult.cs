@@ -41,9 +41,6 @@ public sealed record StoredResult
 
     public required double CropAnchorY { get; init; }
 
-    /// <summary>Detail level as posted, so the form on the result page comes back set to it.</summary>
-    public required string DetailLevelValue { get; init; }
-
     public required string PaletteId { get; init; }
 
     public required IReadOnlyList<string> PinnedArticles { get; init; }
@@ -59,14 +56,8 @@ public sealed record StoredResult
 
     public required decimal PricePerKgRub { get; init; }
 
-    public required string DetailLevel { get; init; }
-
-    public required int RequestedAcross { get; init; }
-
+    /// <summary>Modules that actually fit across the panel's short side, at the chosen bite length.</summary>
     public required int ActualAcross { get; init; }
-
-    /// <summary>Empty when the requested detail level was reached.</summary>
-    public required string LimitNote { get; init; }
 
     public required int MaxColors { get; init; }
 

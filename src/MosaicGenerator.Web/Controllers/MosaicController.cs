@@ -66,7 +66,6 @@ public sealed class MosaicController(
         // knows it. Before one is resolved the request is invalid anyway; the fallback only keeps
         // the validation pass from having to special-case that.
         ModuleChoice choice = form.Choose(
-            generationOptions.ValidationLimits.MaxModules,
             palette?.TypicalThicknessMm ?? ModuleSelector.DefaultPlateThicknessMm);
 
         foreach (ValidationError error in
@@ -213,17 +212,14 @@ public sealed class MosaicController(
     };
 
     /// <summary>
-    /// The module range, joint rule and detail targets as data, so the page can show what a panel
-    /// size will yield before anything is uploaded. Serialised from the core's own values: a
-    /// second copy of the table in a script would be a second answer waiting to disagree with the
-    /// first.
+    /// The module range and joint rule as data, so the page can show what a panel size will yield
+    /// before anything is uploaded. Serialised from the core's own values: a second copy of the
+    /// table in a script would be a second answer waiting to disagree with the first.
     /// </summary>
     private string LayoutData() => JsonSerializer.Serialize(new
     {
         modules = ModuleSelector.AvailableModulesMm
             .Select(module => new { m = module, g = ModuleSelector.GroutFor(module) }),
-        targets = Enum.GetValues<DetailLevel>()
-            .ToDictionary(level => level.ToString(), level => level.TargetAcross()),
         maxModules = generationOptions.ValidationLimits.MaxModules,
     });
 
@@ -239,7 +235,6 @@ public sealed class MosaicController(
         SourceId = sourceId,
         CropAnchorX = form.CropAnchorX,
         CropAnchorY = form.CropAnchorY,
-        DetailLevelValue = form.Detail.ToString(),
         PinnedArticles = form.PinnedArticles,
         StoppedAtPinnedColors = result.StoppedAtPinnedColors,
         JointHex = result.JointColor.ToHex(),
@@ -257,10 +252,7 @@ public sealed class MosaicController(
         MarginYMm = result.Layout.MarginYMm,
         WastePercent = form.WastePercent,
         PricePerKgRub = form.PricePerKgRub,
-        DetailLevel = DetailLevelPresentation.Label(form.Detail),
-        RequestedAcross = choice.RequestedAcross,
         ActualAcross = choice.ModulesAcrossShortSide,
-        LimitNote = DetailLevelPresentation.LimitNote(choice),
         MaxColors = form.MaxColors,
         ColorsBeforeReduction = result.ColorsBeforeReduction,
         ModulesReassigned = result.ModulesReassigned,
@@ -285,7 +277,7 @@ public sealed class MosaicController(
         SourceId = stored.SourceId,
         PanelWidthCm = stored.PanelWidthMm / 10,
         PanelHeightCm = stored.PanelHeightMm / 10,
-        Detail = Enum.TryParse(stored.DetailLevelValue, out DetailLevel level) ? level : DetailLevel.Standard,
+        ModuleAlongMm = stored.ModuleSizeMm,
         PaletteId = stored.PaletteId,
         MaxColors = stored.MaxColors,
         WastePercent = stored.WastePercent,
@@ -297,14 +289,15 @@ public sealed class MosaicController(
     };
 
     /// <summary>
-    /// Core field names to form field names, so errors land on the right input. Module and grout
-    /// are derived rather than entered, so anything the core rejects about them is really a
-    /// complaint about the panel size that produced them.
+    /// Core field names to form field names, so errors land on the right input. The bite's length
+    /// (<c>ModuleWidthMm</c>) is what the mosaicist entered, so a complaint about it belongs on
+    /// that field; the width across the course and the joint are derived from the palette rather
+    /// than entered, so anything the core rejects about them is really a complaint about the panel.
     /// </summary>
     private static string MapField(string coreField) => coreField switch
     {
-        "ModuleWidthMm" or "ModuleHeightMm" or "GroutWidthMm" or "PanelWidthMm" =>
-            nameof(GenerateFormModel.PanelWidthCm),
+        "ModuleWidthMm" => nameof(GenerateFormModel.ModuleAlongMm),
+        "ModuleHeightMm" or "GroutWidthMm" or "PanelWidthMm" => nameof(GenerateFormModel.PanelWidthCm),
         "PanelHeightMm" => nameof(GenerateFormModel.PanelHeightCm),
         _ => coreField,
     };

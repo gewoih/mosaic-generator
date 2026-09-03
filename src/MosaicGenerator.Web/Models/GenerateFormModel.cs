@@ -4,9 +4,10 @@ using MosaicGenerator.Core.Domain;
 namespace MosaicGenerator.Web.Models;
 
 /// <summary>
-/// The form as posted. Module and joint are not asked for: legibility depends on how many modules
-/// land on the subject, so both are derived from the panel and the requested detail level. The
-/// ranges here mirror the core validator so the browser can reject the obvious cases; the core
+/// The form as posted. The joint is not asked for: it is derived from the plate thickness of the
+/// chosen palette. The module width across its course is derived the same way; only its length
+/// along the course — the mosaicist's chosen bite, a floor rather than a fixed size — is entered.
+/// The ranges here mirror the core validator so the browser can reject the obvious cases; the core
 /// validator remains the authority and runs on every submission.
 /// </summary>
 public sealed class GenerateFormModel
@@ -28,8 +29,8 @@ public sealed class GenerateFormModel
     [Range(10, 300, ErrorMessage = "Высота панно: от 10 до 300 см.")]
     public double PanelHeightCm { get; set; } = 15;
 
-    [Display(Name = "Детализация")]
-    public DetailLevel Detail { get; set; } = DetailLevel.Draft;
+    [Display(Name = "Минимальная длина откуса, мм")]
+    public double ModuleAlongMm { get; set; } = 6;
 
     /// <summary>
     /// Which part of the photograph the panel keeps, as a fraction along each axis. The subject
@@ -72,12 +73,12 @@ public sealed class GenerateFormModel
     public double PanelHeightMm => PanelHeightCm * 10;
 
     /// <summary>
-    /// Tessera and joint for this panel, plus whatever kept them from the requested level. The
-    /// piece's width across its course is the plate's thickness, so the palette has to be asked:
-    /// it is the palette that says how thick the material is.
+    /// Tessera and joint for this panel. The piece's width across its course is the plate's
+    /// thickness, so the palette has to be asked: it is the palette that says how thick the
+    /// material is.
     /// </summary>
-    public ModuleChoice Choose(int maxModules, double plateThicknessMm) =>
-        ModuleSelector.Choose(PanelWidthMm, PanelHeightMm, Detail, maxModules, plateThicknessMm);
+    public ModuleChoice Choose(double plateThicknessMm) =>
+        ModuleSelector.Choose(PanelWidthMm, PanelHeightMm, ModuleAlongMm, plateThicknessMm);
 
     public MosaicRequest ToRequest(ModuleChoice choice)
     {
