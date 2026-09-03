@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Генератор макетов мозаики</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="masthead">
+        <a class="masthead__title" asp-controller="Mosaic" asp-action="Index">Генератор макетов мозаики</a>
+        <span class="masthead__note">смальта · прямоугольная укладка</span>
+    </header>
+    <main class="page">
+        @RenderBody()
+    </main>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

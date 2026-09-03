@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "7fWGlUtEzYU=",
+  "success": true,
+  "projectFilePath": "/Users/nranenko/Desktop/Projects/MosaicGenerator/tools/MosaicGenerator.Diag/MosaicGenerator.Diag.csproj",
+  "expectedPackageFiles": [
+    "/Users/nranenko/.nuget/packages/skiasharp/4.151.1/skiasharp.4.151.1.nupkg.sha512",
+    "/Users/nranenko/.nuget/packages/skiasharp.nativeassets.linux/4.151.1/skiasharp.nativeassets.linux.4.151.1.nupkg.sha512",
+    "/Users/nranenko/.nuget/packages/skiasharp.nativeassets.macos/4.151.1/skiasharp.nativeassets.macos.4.151.1.nupkg.sha512",
+    "/Users/nranenko/.nuget/packages/skiasharp.nativeassets.win32/4.151.1/skiasharp.nativeassets.win32.4.151.1.nupkg.sha512"
+  ],
+  "logs": []
+}

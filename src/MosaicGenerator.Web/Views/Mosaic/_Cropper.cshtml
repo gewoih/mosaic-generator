@@ -1,0 +1,23 @@
+@model ParametersViewModel
+
+@{
+    string? source = string.IsNullOrEmpty(Model.Form.SourceId)
+        ? null
+        : Url.Action("Source", new { id = Model.Form.SourceId });
+}
+
+<div class="cropper" data-cropper data-src="@source" hidden="@(source is null)">
+    <div class="cropper__stage">
+        <img class="cropper__image" alt="Исходник" src="@source" />
+        <div class="cropper__frame" data-crop-frame></div>
+    </div>
+    <p class="field__hint" data-crop-hint>
+        Перетащите рамку: в панно попадёт только то, что внутри. Пропорции рамки — пропорции
+        поля мозаики.
+    </p>
+</div>
+
+<input type="hidden" name="CropAnchorX" data-crop-anchor="x"
+       value="@Model.Form.CropAnchorX.ToString(CultureInfo.InvariantCulture)" />
+<input type="hidden" name="CropAnchorY" data-crop-anchor="y"
+       value="@Model.Form.CropAnchorY.ToString(CultureInfo.InvariantCulture)" />

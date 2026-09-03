@@ -1,0 +1,169 @@
+@model ResultViewModel
+@{
+    ViewData["Title"] = "Макет";
+    StoredResult stored = Model.Stored;
+    string id = Model.Id;
+    CultureInfo ru = CultureInfo.GetCultureInfo("ru-RU");
+    var pinned = new HashSet<string>(stored.PinnedArticles, StringComparer.OrdinalIgnoreCase);
+}
+
+<section class="summary">
+    <dl>
+        <div><dt>Панно</dt><dd>@((stored.PanelWidthMm / 10).ToString("0.#", ru)) × @((stored.PanelHeightMm / 10).ToString("0.#", ru)) см</dd></div>
+        <div><dt>Сетка</dt><dd>@stored.Columns × @stored.Rows = @stored.TotalModules.ToString("N0", ru) модулей</dd></div>
+        <div><dt>Детализация</dt><dd>@stored.DetailLevel, @stored.ActualAcross модулей по короткой стороне</dd></div>
+        <div><dt>Модуль / шов</dt><dd>@stored.ModuleSizeMm.ToString("0.#", ru) мм / @stored.GroutWidthMm.ToString("0.#", ru) мм</dd></div>
+        <div>
+            <dt>Шов в работе</dt>
+            <dd>
+                <span class="chip" style="background:@stored.JointHex"></span>
+                L* @stored.JointLightness.ToString("0", ru), доля тессеры @((stored.ModuleAreaFraction * 100).ToString("0", ru)) %
+            </dd>
+        </div>
+        <div><dt>Поля</dt><dd>@stored.MarginXMm.ToString("0.#", ru) мм по бокам, @stored.MarginYMm.ToString("0.#", ru) мм сверху и снизу</dd></div>
+        <div>
+            <dt>Палитра</dt>
+            <dd>
+                @stored.PaletteName, @stored.Lines.Count цв.
+                @if (stored.ColorsBeforeReduction > stored.Lines.Count)
+                {
+                    <text>из @stored.ColorsBeforeReduction подобранных</text>
+                }
+            </dd>
+        </div>
+        <div><dt>Запас</dt><dd>@stored.WastePercent.ToString("0.#", ru) %</dd></div>
+        <div><dt>Цена материала</dt><dd>@stored.PricePerKgRub.ToString("N0", ru) ₽/кг</dd></div>
+    </dl>
+    @if (!string.IsNullOrEmpty(stored.LimitNote))
+    {
+        <p class="summary__warning">@stored.LimitNote</p>
+    }
+    @if (stored.StoppedAtPinnedColors)
+    {
+        <p class="summary__warning">
+            Закреплённых артикулов больше, чем лимит цветов: лимит уступил закреплению.
+        </p>
+    }
+    @if (stored.ColorsBeforeReduction > stored.Lines.Count)
+    {
+        double share = (double)stored.ModulesReassigned / stored.TotalModules * 100;
+        <p class="summary__note">
+            Свёрнуто @(stored.ColorsBeforeReduction - stored.Lines.Count) оттенков при лимите
+            @stored.MaxColors: переназначено @stored.ModulesReassigned из @stored.TotalModules.ToString("N0", ru)
+            модулей (@share.ToString("0.#", ru) %).
+        </p>
+    }
+    <p class="summary__note">
+        @if (stored.CompensateJoint)
+        {
+            <text>
+                Цвет подобран с поправкой на шов: он имеет собственную светлоту и тянет к себе
+                каждую тессеру, так что без поправки панно вышло бы площе макета.
+            </text>
+        }
+        else
+        {
+            <text>Поправка на шов выключена: артикулы подобраны по цвету самой смальты.</text>
+        }
+        В обе картинки записан физический масштаб, поэтому печать «100 %» выходит в реальный размер.
+    </p>
+</section>
+
+<form class="panel" id="regenerate" asp-action="Regenerate" method="post"
+      enctype="multipart/form-data" data-layout-form>
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="All" class="errors"></div>
+    <input type="hidden" name="SourceId" value="@stored.SourceId" />
+
+    <fieldset class="field-group">
+        <legend>Кадр</legend>
+        <div class="field field--wide">
+            @await Html.PartialAsync("_Cropper", Model.Parameters)
+        </div>
+    </fieldset>
+
+    @await Html.PartialAsync("_Parameters", Model.Parameters)
+
+    <button class="button" type="submit">Пересобрать макет</button>
+</form>
+
+<section class="outputs">
+    <figure>
+        <img src="@Url.Action("Preview", new { id })" alt="Превью макета" />
+        <figcaption>
+            <strong>Превью макета</strong>
+            <span>@stored.PreviewWidthPx × @stored.PreviewHeightPx px, @stored.PreviewDpi.ToString("0", ru) dpi</span>
+            <a class="button button--small" href="@Url.Action("Preview", new { id, download = true })">Скачать PNG</a>
+        </figcaption>
+    </figure>
+    <figure>
+        <img src="@Url.Action("Scheme", new { id })" alt="Схема под работу" />
+        <figcaption>
+            <strong>Схема под работу</strong>
+            <span>@stored.SchemeWidthPx × @stored.SchemeHeightPx px, @stored.SchemeDpi.ToString("0", ru) dpi</span>
+            <a class="button button--small" href="@Url.Action("Scheme", new { id, download = true })">Скачать PNG</a>
+        </figcaption>
+    </figure>
+</section>
+
+<section class="consumption">
+    <h2>Расход материала</h2>
+    <p class="summary__note">
+        Отметьте оттенки, которые нельзя сворачивать: несколько тессер на блик или клюв держат
+        весь сюжет, а по числу модулей они уходят первыми. Отметки применяются кнопкой
+        «Пересобрать макет».
+    </p>
+    <table>
+        <thead>
+        <tr>
+            <th>Код</th>
+            <th title="Не сворачивать этот артикул">Держать</th>
+            <th>Артикул</th>
+            <th>Название</th>
+            <th class="numeric">Модулей</th>
+            <th class="numeric">Площадь с запасом, м²</th>
+            <th class="numeric">Масса, кг</th>
+            <th class="numeric">Стоимость, ₽</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (StoredMaterialLine line in stored.Lines)
+        {
+            <tr>
+                <td class="code">@line.Code</td>
+                <td class="code">
+                    <input type="checkbox" form="regenerate" name="PinnedArticles" value="@line.Article"
+                           checked="@pinned.Contains(line.Article)"
+                           aria-label="Не сворачивать @line.Article" />
+                </td>
+                <td class="mono">@line.Article</td>
+                <td>
+                    <span class="chip" style="background:@line.Hex"></span>
+                    @line.Name
+                </td>
+                <td class="numeric">@line.ModuleCount.ToString("N0", ru)</td>
+                <td class="numeric">@line.GrossAreaM2.ToString("N3", ru)</td>
+                <td class="numeric">@line.MassKg.ToString("N2", ru)</td>
+                <td class="numeric">@line.Cost.ToString("N0", ru)</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot>
+        <tr>
+            <td colspan="4">Итого</td>
+            <td class="numeric">@stored.TotalModules.ToString("N0", ru)</td>
+            <td class="numeric">@stored.TotalGrossAreaM2.ToString("N3", ru)</td>
+            <td class="numeric">@stored.TotalMassKg.ToString("N2", ru)</td>
+            <td class="numeric">@stored.TotalCost.ToString("N0", ru)</td>
+        </tr>
+        </tfoot>
+    </table>
+</section>
+
+<a class="button" asp-action="Index">Начать с другой фотографии</a>
+
+@section Scripts {
+    <script type="application/json" data-layout-data>@Html.Raw(Model.Parameters.LayoutDataJson)</script>
+    <script src="~/js/layout.js" asp-append-version="true"></script>
+    <script src="~/js/crop.js" asp-append-version="true"></script>
+}
