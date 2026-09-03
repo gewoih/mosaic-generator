@@ -102,12 +102,9 @@ public static class Tessellation
         // A streamline is seeded a course apart, but it is allowed to run closer than that before it
         // gives up. Jobard and Lefevre make these two distances different for exactly this reason: a
         // line that stops at its seeding distance brakes against every neighbour it passes, and the
-        // field fills with stubs instead of runs. The spacing check is now 98-100% of all course
-        // breaks measured — the curvature limit and self-intersection barely fire. Replacing the
-        // greedy FIFO in Drain with a longest-candidate pick was tried against this (docs/zhadnyy-
-        // posev-plan.md) and moved none of the cartoon metrics: the stubs come from the field, not
-        // the seeding order. What the slack packs tighter than a piece the knapping and the sliver
-        // merge take back out.
+        // field fills with stubs instead of runs. The spacing check is now 98-100% of every course
+        // break measured — the curvature limit and self-intersection barely fire. What the slack
+        // packs tighter than a piece the knapping and the sliver merge take back out.
         double dTest = 0.50 * dAcross;
         double integStep = Math.Max(0.3, module / 3.0);
         double minLength = 2.0 * dAlong;
