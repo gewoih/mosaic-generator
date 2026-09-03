@@ -6,9 +6,11 @@ namespace MosaicGenerator.Core.Grid;
 /// <summary>
 /// Lays the tesserae out over the field.
 ///
-/// The followed layout is one connected pass, in the order a mosaicist works. First the border: two
-/// straight courses along the panel edge, which hold the composition and stop the fill from running
-/// off the edge. Then the contours — the subject's silhouette and
+/// The followed layout is one connected pass, in the order a mosaicist works. First the border: one
+/// straight course along the panel edge, and a second on top only where the field is large enough
+/// that two rows read as a border rather than a frame (<see cref="BorderCourseCount"/>), plus a
+/// barrier ring that is never laid but still stops the fill from running off the edge. Then the
+/// contours — the subject's silhouette and
 /// its major internal edges — each get two tight courses hugging them (opus vermiculatum). Then
 /// the rest of the field is filled with evenly-spaced streamlines (Jobard &amp; Lefèvre 1997) over a
 /// guidance field that echoes the nearest contour where the photograph is flat and follows the
@@ -24,6 +26,15 @@ public static class Tessellation
     /// before a run and read after it; nothing in the pipeline looks at it.
     /// </summary>
     public static readonly int[] BreakReasons = new int[5];
+
+    // The share of the field a *second* laid border course may add. One course is always laid where
+    // the panel can carry it — it holds the composition and the fill is seeded off it, and dropping
+    // it entirely leaves the perimeter as a field of orphan wedges (filler 8 % -> 35 % on a 15 cm
+    // panel). Whether a second course goes on top is a matter of proportion: two straight rows on a
+    // 15 cm piece read as a frame the work is half made of, on a 60 cm piece they read as a border.
+    // The second ring is laid only if the two-ring band stays under this fraction of the field.
+    // Tuned on the bench across the eight sample photos and five sizes.
+    private const double BorderAreaBudget = 0.13;
 
     /// <summary>Plain rectangular grid in field millimetres — the fallback when there is no photograph to follow.</summary>
     public static IReadOnlyList<Tessera> NominalGrid(MosaicLayout layout)
@@ -153,17 +164,37 @@ public static class Tessellation
 
         var courses = new List<PointD[]>();
 
-        // 1. The border (bordura): two straight courses along the panel edge.
+        // 1. The border (bordura): one straight course along the panel edge, a second on top only on
+        //    a panel large enough to carry it (BorderCourseCount). A barrier ring half a course in is
+        //    built regardless; when a border course is laid it is that ring, and on a panel too small
+        //    for even one course the barrier alone is registered — never laid as tesserae — so the
+        //    fill still stops short of the edge and is seeded inwards (the reason the panel frame no
+        //    longer needs to sit in the distance field).
+        PointD[]? barrier = RectRing(fieldWidth, fieldHeight, 0.5 * dAcross, dAcross);
         PointD[]? innermostRing = null;
-        foreach (PointD[] ring in BorderRings(fieldWidth, fieldHeight, dAcross))
+        int borderRingCount = BorderCourseCount(layout);
+        for (int i = 0; i < borderRingCount; i++)
         {
+            PointD[]? ring = RectRing(fieldWidth, fieldHeight, (i + 0.5) * dAcross, dAcross);
+            if (ring is null)
+            {
+                break;
+            }
+
             courses.Add(ring);
             placer.RegisterBarrier(ring, integStep);
             innermostRing = ring;
         }
 
+        bool anyLaidRing = innermostRing is not null;
+        innermostRing ??= barrier;
         if (innermostRing is not null)
         {
+            if (!anyLaidRing)
+            {
+                placer.RegisterBarrier(innermostRing, integStep);
+            }
+
             placer.SeedAlong(innermostRing, dAcross);   // the field is filled inwards from the border
         }
 
@@ -926,29 +957,81 @@ public static class Tessellation
     // -- shared -----------------------------------------------------------------------------------
 
     /// <summary>
-    /// The border courses: closed rectangles inset half a course and one and a half courses from the
-    /// panel edge. Laid first and registered as barriers, so the fill stops against them.
+    /// How many straight border courses are laid for this panel: one wherever the field can carry a
+    /// ring at all, and a second on top only if the two-ring band stays under
+    /// <see cref="BorderAreaBudget"/> of the field. Zero only on a panel too small to fit even one
+    /// ring. Exposed so the diagnostic bench can tell border pieces from fill without re-deriving the
+    /// rule.
     /// </summary>
-    private static IEnumerable<PointD[]> BorderRings(double fieldWidth, double fieldHeight, double dSep)
+    public static int BorderCourseCount(MosaicLayout layout)
     {
-        foreach (double inset in new[] { dSep * 0.5, dSep * 1.5 })
+        ArgumentNullException.ThrowIfNull(layout);
+
+        double dAcross = layout.ModuleHeightMm + layout.GroutWidthMm;
+        double fieldWidth = layout.FieldWidthMm;
+        double fieldHeight = layout.FieldHeightMm;
+
+        int wanted = Math.Max(1, BorderRingCount(fieldWidth, fieldHeight, dAcross, BorderAreaBudget));
+        int fits = 0;
+        for (int i = 0; i < wanted; i++)
         {
-            double right = fieldWidth - inset;
-            double bottom = fieldHeight - inset;
-            if (right - inset < dSep || bottom - inset < dSep)
+            if (RectRing(fieldWidth, fieldHeight, (i + 0.5) * dAcross, dAcross) is null)
             {
-                yield break;   // a panel too small to carry a border
+                break;
             }
 
-            yield return
-            [
-                new PointD(inset, inset),
-                new PointD(right, inset),
-                new PointD(right, bottom),
-                new PointD(inset, bottom),
-                new PointD(inset, inset),
-            ];
+            fits++;
         }
+
+        return fits;
+    }
+
+    /// <summary>
+    /// The largest ring count in {0, 1, 2} whose border band covers no more than
+    /// <paramref name="budget"/> of the field. The caller keeps a floor of one.
+    /// </summary>
+    private static int BorderRingCount(double fieldWidth, double fieldHeight, double dAcross, double budget)
+    {
+        double total = fieldWidth * fieldHeight;
+        for (int k = 2; k >= 1; k--)
+        {
+            double innerWidth = fieldWidth - (2 * k * dAcross);
+            double innerHeight = fieldHeight - (2 * k * dAcross);
+            if (innerWidth <= 0 || innerHeight <= 0)
+            {
+                continue;
+            }
+
+            if ((total - (innerWidth * innerHeight)) / total <= budget)
+            {
+                return k;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// A closed rectangle inset <paramref name="inset"/> from every field edge, or null if the panel
+    /// is too small to carry a course at that inset.
+    /// </summary>
+    private static PointD[]? RectRing(double fieldWidth, double fieldHeight, double inset, double dAcross)
+    {
+        double right = fieldWidth - inset;
+        double bottom = fieldHeight - inset;
+        if (right - inset < dAcross || bottom - inset < dAcross)
+        {
+            return null;
+        }
+
+        return
+        [
+            new PointD(inset, inset),
+            new PointD(right, inset),
+            new PointD(right, bottom),
+            new PointD(inset, bottom),
+            new PointD(inset, inset),
+        ];
     }
 
     /// <summary>

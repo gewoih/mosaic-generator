@@ -317,10 +317,12 @@ internal static class Program
                         : string.Empty));
 
                 // Border rings plus two rows per contour are laid first, so their course ids are the
-                // lowest. Everything with a higher id came out of the streamline fill.
-                int structural = 2 + (cs.Count * 2);
+                // lowest. Everything with a higher id came out of the streamline fill. The border
+                // ring count now varies with panel size.
+                int borderRings = Tessellation.BorderCourseCount(layout);
+                int structural = borderRings + (cs.Count * 2);
                 int inStructural = tesserae.Count(t => t.CourseId >= 0 && t.CourseId < structural);
-                int inBorder = tesserae.Count(t => t.CourseId is >= 0 and < 2);
+                int inBorder = tesserae.Count(t => t.CourseId >= 0 && t.CourseId < borderRings);
                 Console.WriteLine(
                     $"  кусков в бордюре {inBorder * 100.0 / tesserae.Count:0.0}%, " +
                     $"в контурных курсах {(inStructural - inBorder) * 100.0 / tesserae.Count:0.0}%, " +
