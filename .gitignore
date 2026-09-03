@@ -1,0 +1,25 @@
+# Сборка .NET
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+artifacts/
+
+# Диагностический прогон стенда — генерируемый вывод
+diag-out/
+
+# IDE
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+*_i.c
+*_p.c
+
+# ОС
+.DS_Store
+Thumbs.db
+
+# Прочее
+*.log
