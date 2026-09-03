@@ -167,10 +167,19 @@ public static class Tessellation
             placer.SeedAlong(innermostRing, dAcross);   // the field is filled inwards from the border
         }
 
-        // 2. Contour courses (opus vermiculatum): two rows straddling each contour polyline.
-        foreach (PointD[] contour in contours)
+        // 2. Contour courses (opus vermiculatum): two rows along each contour polyline. For the
+        //    silhouette — the figure-mask ring, always contour 0 when there is one — both rows go on
+        //    the background side: the figure keeps its own andamento, the background gets the halo.
+        //    Internal contours have no outside, so those straddle.
+        bool haveSilhouette = field.Figure is not null && contours.Count > 0;
+        for (int ci = 0; ci < contours.Count; ci++)
         {
-            foreach (double offset in stackalloc[] { -dAcross / 2.0, dAcross / 2.0 })
+            PointD[] contour = contours[ci];
+            double[] offsets = haveSilhouette && ci == 0
+                ? OutwardOffsets(contour, field.Figure!, fieldWidth, fieldHeight, dAcross)
+                : [-dAcross / 2.0, dAcross / 2.0];
+
+            foreach (double offset in offsets)
             {
                 PointD[] row = OffsetPolyline(contour, offset);
                 courses.Add(row);
@@ -942,6 +951,34 @@ public static class Tessellation
         }
     }
 
+    /// <summary>
+    /// The silhouette's row offsets, all on the background side: the figure keeps its own andamento,
+    /// the background gets the halo. Two rows — half a course and one and a half — on a panel large
+    /// enough to carry them; one row on a small panel, where a two-row halo eats as much of the work
+    /// as the border does (measured: contour courses take a third of a 15 cm panel with two rows).
+    /// The sign is whichever way <see cref="OffsetPolyline"/> steps off the figure, from sampling the
+    /// mask a half-course out along the contour.
+    /// </summary>
+    private static double[] OutwardOffsets(
+        PointD[] contour, FigureMask figure, double fieldWidth, double fieldHeight, double dAcross)
+    {
+        double half = dAcross / 2.0;
+        PointD[] probe = OffsetPolyline(contour, half);
+        int onFigure = 0;
+        foreach (PointD p in probe)
+        {
+            if (figure.ForegroundAt(p.X / fieldWidth, p.Y / fieldHeight))
+            {
+                onFigure++;
+            }
+        }
+
+        double sign = onFigure > probe.Length / 2 ? -1.0 : 1.0;
+        return Math.Min(fieldWidth, fieldHeight) >= 300.0
+            ? [sign * half, sign * 3.0 * half]
+            : [sign * half];
+    }
+
     private static PointD[] OffsetPolyline(PointD[] polyline, double offset)
     {
         var result = new PointD[polyline.Length];
@@ -974,15 +1011,7 @@ public static class Tessellation
     /// draws its contours at, so the piece-size signal and the contour courses agree on where a form
     /// is. Returns 0 for a photograph with no real edges.
     /// </summary>
-    private static double ContourLevel(DirectionField field)
-    {
-        ReadOnlySpan<double> edge = field.EdgeCells;
-        var sorted = edge.ToArray();
-        Array.Sort(sorted);
-        int index = Math.Clamp((int)(0.99 * (sorted.Length - 1)), 0, sorted.Length - 1);
-        double strong = sorted[index];
-        return strong < 0.15 ? 0.0 : Math.Max(0.12, strong * 0.42);
-    }
+    private static double ContourLevel(DirectionField field) => ContourSet.LevelFor(field.EdgeCells);
 
     /// <summary>
     /// The nearest bite on the real size series {6, 8, 10, 12, 15, 20} mm to <paramref name="target"/>,

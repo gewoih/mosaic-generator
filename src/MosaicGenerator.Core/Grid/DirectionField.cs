@@ -24,13 +24,17 @@ public sealed class DirectionField
     // Edge strength before diffusion, 0..1, for finding contours to run a course along.
     private readonly double[] _edge;
 
-    private DirectionField(int width, int height, double[] vx, double[] vy, double[] edge)
+    // Foreground / background over the grid, or null when there is no clean figure to find.
+    private readonly FigureMask? _figure;
+
+    private DirectionField(int width, int height, double[] vx, double[] vy, double[] edge, FigureMask? figure)
     {
         Width = width;
         Height = height;
         _vx = vx;
         _vy = vy;
         _edge = edge;
+        _figure = figure;
     }
 
     public int Width { get; }
@@ -39,6 +43,9 @@ public sealed class DirectionField
 
     /// <summary>Raw edge-strength grid, 0..1, row-major, <see cref="Width"/> by <see cref="Height"/> — for contour extraction.</summary>
     internal ReadOnlySpan<double> EdgeCells => _edge;
+
+    /// <summary>Foreground / background over the grid, for drawing the silhouette as a closed ring. Null when there is no clean figure.</summary>
+    internal FigureMask? Figure => _figure;
 
     /// <summary>Structure-tensor orientation and its confidence at a grid cell, for blending with contour guidance.</summary>
     internal (double Theta, double Coherence) TensorAt(double u, double v)
@@ -104,7 +111,12 @@ public sealed class DirectionField
             width = Math.Max(16, (int)Math.Round(longSide * fieldAspect));
         }
 
-        double[] luminance = SampleLuminance(image, crop, width, height);
+        CieLab[] colour = SampleColour(image, crop, width, height);
+        var luminance = new double[width * height];
+        for (int i = 0; i < luminance.Length; i++)
+        {
+            luminance[i] = colour[i].L;
+        }
 
         // Structure tensor components, smoothed so the orientation is stable over a few pixels.
         var jxx = new double[width * height];
@@ -160,13 +172,18 @@ public sealed class DirectionField
 
         Blur(edge, width, height);
 
+        // Separate the subject from the surround while the colour is still to hand: ContourSet draws
+        // the silhouette off this, so the ring closes even where the subject matches the surround in
+        // tone. Null when there is no clean figure — ContourSet then uses the edge level set alone.
+        FigureMask? figure = FigureMask.Build(width, height, colour, edge, ContourSet.LevelFor(edge));
+
         // A blank interior has nothing to diffuse from, so seed every unsure cell with the mean
         // orientation around the frame. The courses then echo the frame instead of defaulting to
         // horizontal everywhere; contour echoing (opus musivum) is layered on later.
         SeedBlankCells(vx, vy, width, height);
 
         Diffuse(vx, vy, width, height);
-        return new DirectionField(width, height, vx, vy, edge);
+        return new DirectionField(width, height, vx, vy, edge, figure);
     }
 
     private (double Vx, double Vy) SampleVector(double u, double v)
@@ -195,9 +212,9 @@ public sealed class DirectionField
 
     private static double Lerp(double a, double b, double t) => a + (t * (b - a));
 
-    private static double[] SampleLuminance(SourceImage image, CropRect crop, int width, int height)
+    private static CieLab[] SampleColour(SourceImage image, CropRect crop, int width, int height)
     {
-        var luminance = new double[width * height];
+        var colour = new CieLab[width * height];
         double blockW = (double)crop.Width / width;
         double blockH = (double)crop.Height / height;
 
@@ -210,11 +227,11 @@ public sealed class DirectionField
                 int px0 = crop.X + (int)(x * blockW);
                 int px1 = crop.X + (int)Math.Ceiling((x + 1) * blockW);
                 LinearRgb average = image.AverageLinear(px0, py0, Math.Max(1, px1 - px0), Math.Max(1, py1 - py0));
-                luminance[(y * width) + x] = average.ToLab().L;
+                colour[(y * width) + x] = average.ToLab();
             }
         }
 
-        return luminance;
+        return colour;
     }
 
     private static double Sobel(double[] source, int width, int height, int x, int y, bool horizontal)

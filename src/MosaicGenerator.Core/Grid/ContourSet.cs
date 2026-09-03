@@ -4,10 +4,11 @@ namespace MosaicGenerator.Core.Grid;
 
 /// <summary>
 /// The lines a mosaicist would draw first: the subject's silhouette and its major internal
-/// boundaries. Taken as the level set of the edge-strength field at a high percentile, traced with
-/// marching squares, chained into polylines and simplified. Everything downstream — the contour
-/// courses (opus vermiculatum) and the distance field that steers the background (opus musivum) —
-/// is built from these.
+/// boundaries. The silhouette is the boundary of the connected figure region (<see cref="FigureMask"/>)
+/// when there is one — a closed ring, contour 0 — and the internal boundaries are the level set of
+/// the edge-strength field at a high percentile. Both are traced with marching squares, chained into
+/// polylines and simplified. Everything downstream — the contour courses (opus vermiculatum) and the
+/// distance field that steers the background (opus musivum) — is built from these.
 /// </summary>
 public static class ContourSet
 {
@@ -21,47 +22,81 @@ public static class ContourSet
         int h = field.Height;
         ReadOnlySpan<double> edge = field.EdgeCells;
 
-        // Relative to how strong the strongest edges are, not to a fixed percentile: a thin
-        // silhouette is only a percent or two of the pixels, so a percentile threshold would sit
-        // in the flat background and find nothing.
-        double strong = Percentile(edge, 0.99);
-        if (strong < 0.15)
-        {
-            return [];
-        }
-
-        double level = Math.Max(0.12, strong * 0.42);
-
-        var segments = MarchingSquares(edge, w, h, level);
-        if (segments.Count == 0)
-        {
-            return [];
-        }
-
         double sx = fieldWidthMm / Math.Max(1, w - 1);
         double sy = fieldHeightMm / Math.Max(1, h - 1);
-        for (int i = 0; i < segments.Count; i++)
-        {
-            (PointD a, PointD b) = segments[i];
-            segments[i] = (new PointD(a.X * sx, a.Y * sy), new PointD(b.X * sx, b.Y * sy));
-        }
-
         double weld = moduleMm * 0.7;
         double minLength = moduleMm * 4.0;
         double epsilon = moduleMm * 0.75;
 
-        var polylines = new List<PointD[]>();
-        foreach (List<PointD> chain in Chain(segments, weld))
+        List<PointD[]> ScaleAndSimplify(List<(PointD A, PointD B)> segs, bool exactChain = false)
         {
-            PointD[] simplified = DouglasPeucker(chain, epsilon);
-            if (Length(simplified) >= minLength)
+            for (int i = 0; i < segs.Count; i++)
             {
-                polylines.Add(simplified);
+                (PointD a, PointD b) = segs[i];
+                segs[i] = (new PointD(a.X * sx, a.Y * sy), new PointD(b.X * sx, b.Y * sy));
+            }
+
+            var lines = new List<PointD[]>();
+            IEnumerable<List<PointD>> chains = exactChain ? ChainExact(segs) : Chain(segs, weld);
+            foreach (List<PointD> chain in chains)
+            {
+                PointD[] simplified = DouglasPeucker(chain, epsilon);
+                if (Length(simplified) >= minLength)
+                {
+                    lines.Add(simplified);
+                }
+            }
+
+            return lines;
+        }
+
+        // The silhouette: the boundary of the connected figure region, a closed ring even where the
+        // subject matches the surround in tone and the edge level set below would break. Its internal
+        // boundaries still come from the level set.
+        var rings = new List<PointD[]>();
+        FigureMask? figure = field.Figure;
+        if (figure is not null)
+        {
+            rings.AddRange(ScaleAndSimplify(MarchingSquares(figure.Cells, w, h, 0.5), exactChain: true));
+        }
+
+        var polylines = new List<PointD[]>(rings);
+
+        // Relative to how strong the strongest edges are, not to a fixed percentile: a thin
+        // silhouette is only a percent or two of the pixels, so a percentile threshold would sit
+        // in the flat background and find nothing.
+        double level = LevelFor(edge);
+        if (level > 0.0)
+        {
+            foreach (PointD[] line in ScaleAndSimplify(MarchingSquares(edge, w, h, level)))
+            {
+                // Drop what only retraces a silhouette ring we already have from the mask.
+                if (rings.Exists(r => Overlaps(line, r, weld)))
+                {
+                    continue;
+                }
+
+                polylines.Add(line);
             }
         }
 
+        if (polylines.Count == 0)
+        {
+            return [];
+        }
+
+        // Longest first, as CourseGuidance and Tessellation both assume. The silhouette rings are
+        // kept ahead of the level-set contours regardless of length: they are the structural line
+        // the fill echoes, and the level set only ever holds internal detail once a ring is present.
+        int Rank(PointD[] p) => rings.Contains(p) ? 0 : 1;
         polylines.Sort((p, q) =>
         {
+            int byRing = Rank(p).CompareTo(Rank(q));
+            if (byRing != 0)
+            {
+                return byRing;
+            }
+
             int byLen = Length(q).CompareTo(Length(p));
             if (byLen != 0)
             {
@@ -73,6 +108,44 @@ public static class ContourSet
         });
 
         return polylines;
+    }
+
+    /// <summary>
+    /// The edge strength that counts as being on a contour — a high percentile of the field, floored
+    /// so a soft photograph still yields a line. Zero when the photograph has no real edges. Shared
+    /// by <see cref="Extract"/>, <see cref="FigureMask"/> and the piece-size signal in Tessellation
+    /// so all three agree on where a form is.
+    /// </summary>
+    internal static double LevelFor(ReadOnlySpan<double> edge)
+    {
+        double strong = Percentile(edge, 0.99);
+        return strong < 0.15 ? 0.0 : Math.Max(0.12, strong * 0.42);
+    }
+
+    /// <summary>True when <paramref name="line"/> runs within <paramref name="tol"/> of <paramref name="other"/> for most of its length.</summary>
+    private static bool Overlaps(PointD[] line, PointD[] other, double tol)
+    {
+        int near = 0;
+        foreach (PointD p in line)
+        {
+            if (DistanceToPolyline(p, other) <= tol)
+            {
+                near++;
+            }
+        }
+
+        return near >= line.Length * 0.6;
+    }
+
+    private static double DistanceToPolyline(PointD p, PointD[] poly)
+    {
+        double best = double.MaxValue;
+        for (int i = 1; i < poly.Length; i++)
+        {
+            best = Math.Min(best, PerpendicularDistance(p, poly[i - 1], poly[i]));
+        }
+
+        return best;
     }
 
     private static double Percentile(ReadOnlySpan<double> values, double fraction)
@@ -121,8 +194,29 @@ public static class ContourSet
                     case 4: case 11: segments.Add((Right(), Bottom())); break;
                     case 6: case 9: segments.Add((Top(), Bottom())); break;
                     case 7: case 8: segments.Add((Left(), Bottom())); break;
-                    case 5: segments.Add((Left(), Top())); segments.Add((Right(), Bottom())); break;
-                    case 10: segments.Add((Top(), Right())); segments.Add((Left(), Bottom())); break;
+                    // Saddle: two opposite corners are above the level, two below. Which pair the
+                    // contour keeps together is set by the cell centre — and on a hard 0/1 mask, where
+                    // the four corners average exactly to the level, by joining the above-level region,
+                    // so a diagonal figure boundary stays one connected ring instead of breaking at
+                    // every step of the staircase.
+                    case 5:
+                    case 10:
+                    {
+                        bool joinAbove = (tl + tr + br + bl) * 0.25 >= level;
+                        bool tlBr = code == 5;
+                        if (tlBr == joinAbove)
+                        {
+                            segments.Add((Top(), Right()));
+                            segments.Add((Left(), Bottom()));
+                        }
+                        else
+                        {
+                            segments.Add((Left(), Top()));
+                            segments.Add((Right(), Bottom()));
+                        }
+
+                        break;
+                    }
                 }
             }
         }
@@ -134,6 +228,79 @@ public static class ContourSet
     {
         double d = b - a;
         return Math.Abs(d) < 1e-9 ? 0.5 : Math.Clamp((level - a) / d, 0.0, 1.0);
+    }
+
+    /// <summary>
+    /// Chains marching-squares segments whose endpoints coincide exactly — the case for a 0/1 mask,
+    /// where every adjacent pair shares a vertex to the bit. Each vertex has two incident ends on a
+    /// clean boundary, so the walk is unambiguous and every loop comes back closed. Unlike
+    /// <see cref="Chain"/> it never welds across a near-miss, which on a flat run of a staircase
+    /// boundary would short-circuit the loop into halves.
+    /// </summary>
+    private static IEnumerable<List<PointD>> ChainExact(List<(PointD A, PointD B)> segments)
+    {
+        static (long, long) Key(PointD p) =>
+            ((long)Math.Round(p.X * 4096.0), (long)Math.Round(p.Y * 4096.0));
+
+        var ends = new Dictionary<(long, long), List<int>>();
+        void Register((long, long) key, int seg)
+        {
+            if (!ends.TryGetValue(key, out List<int>? list))
+            {
+                ends[key] = list = [];
+            }
+
+            list.Add(seg);
+        }
+
+        for (int i = 0; i < segments.Count; i++)
+        {
+            Register(Key(segments[i].A), i);
+            Register(Key(segments[i].B), i);
+        }
+
+        var used = new bool[segments.Count];
+        for (int start = 0; start < segments.Count; start++)
+        {
+            if (used[start])
+            {
+                continue;
+            }
+
+            var chain = new List<PointD> { segments[start].A, segments[start].B };
+            used[start] = true;
+
+            PointD head = segments[start].B;
+            while (true)
+            {
+                if (!ends.TryGetValue(Key(head), out List<int>? here))
+                {
+                    break;
+                }
+
+                int next = -1;
+                foreach (int k in here)
+                {
+                    if (!used[k])
+                    {
+                        next = k;
+                        break;
+                    }
+                }
+
+                if (next < 0)
+                {
+                    break;
+                }
+
+                used[next] = true;
+                (PointD a, PointD b) = segments[next];
+                head = Key(a) == Key(head) ? b : a;
+                chain.Add(head);
+            }
+
+            yield return chain;
+        }
     }
 
     private static IEnumerable<List<PointD>> Chain(List<(PointD A, PointD B)> segments, double weld)
