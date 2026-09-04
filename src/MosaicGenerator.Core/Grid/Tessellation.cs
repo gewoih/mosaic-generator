@@ -86,10 +86,24 @@ public static class Tessellation
         // How much longer than the base bite a course may run where the picture is calm. A mosaicist
         // bites longer pieces on an open background and shorter ones where the form turns; across the
         // course the plate fixes the width, so only this one length varies, and it varies between
-        // courses, never within one. Twice the base takes a 6-8 mm module to 12-16 mm on the open
-        // background — the size a real mosaic uses there — while the snap to the size series keeps it
-        // to two or three deliberate steps.
-        const double MaxAlongScale = 2.0;
+        // courses, never within one.
+        //
+        // The ceiling on it is a proportion, not a multiple of the chosen bite. Coarser background is
+        // coarser in both directions at once, and only one of the two is free here, so a bite let out
+        // on its own turns the piece into a stick. Past about one and a half plates it stops being a
+        // tessera: a stick is rigid, it cannot sit along a curving course, and at every turn it
+        // leaves a wedge between its neighbours — the wedge is merged away and a courseless plug
+        // takes its place. Measured over 24 runs by taking the old ceiling of twice the bite down to
+        // none: plugs 23.6 -> 10.8 % of the panel, quadrilaterals 35.5 -> 47.0 %, needles -58 %,
+        // wide-gap area -20 %, for +3.6 % pieces and +1.3 % ΔE. On the cartoon the background stops
+        // rippling and falls into arcs around the silhouette.
+        //
+        // With today's smalt — a 7 mm plate under a 10 mm bite — the rule lands on the base bite
+        // itself, which is what that experiment measured; on a thicker plate it lets the background
+        // grow again, honestly, in both directions.
+        const double MaxAspect = 1.4;
+        double maxAlong = Math.Max(along, across * MaxAspect);
+        double maxAlongScale = maxAlong / along;
 
         // Floor on a piece that can actually be broken and placed. It is the plate, not the bite:
         // across the course a piece is exactly as wide as the plate is thick — that side cannot be
@@ -122,7 +136,7 @@ public static class Tessellation
         // Where a course sits relative to the picture's edges decides how long its pieces are cut. The
         // reference is the same level ContourSet draws its contours at — a course running through edge
         // this strong is on a form and stays at the base bite; one through near-flat field is on the
-        // background and its bite grows toward MaxAlongScale. Tied to the contour level so there is no
+        // background and its bite grows toward maxAlong. Tied to the contour level so there is no
         // separate number to tune. With no contour anywhere there is no background to tell from a
         // subject, so the bite stays uniform.
         double edgeRef = ContourLevel(field);
@@ -399,7 +413,7 @@ public static class Tessellation
         }
 
         // Mean edge strength under the course sets the bite: field this strong is a form and holds the
-        // base module, near-flat field is background and the bite grows toward MaxAlongScale. The
+        // base module, near-flat field is background and the bite grows toward maxAlong. The
         // result snaps to the real size series, so a background reads as two or three deliberate sizes
         // rather than a smear of arbitrary lengths.
         double ResizedAlong(PointD[] course)
@@ -415,7 +429,7 @@ public static class Tessellation
             // strong — most of an open sky or a calm water.
             double e = course.Length > 0 ? sum / course.Length : edgeRef;
             double t = Math.Clamp(e / Math.Max(edgeRef * 0.35, 1e-6), 0.0, 1.0);
-            double scale = MaxAlongScale - ((MaxAlongScale - 1.0) * t);
+            double scale = maxAlongScale - ((maxAlongScale - 1.0) * t);
 
             // And only where the course itself runs reasonably straight. A long rigid piece cannot
             // follow a bend, so a course that curves hard — tight around a shoulder, into a corner of
@@ -427,7 +441,7 @@ public static class Tessellation
             double straight = arc > 1e-6 ? Math.Clamp((chord / arc - 0.80) / 0.15, 0.0, 1.0) : 0.0;
             scale = 1.0 + ((scale - 1.0) * straight);
 
-            return SnapAlong(along * scale, along, along * MaxAlongScale);
+            return SnapAlong(along * scale, along, maxAlong);
         }
 
         List<Tessera> CutCells(
@@ -438,7 +452,7 @@ public static class Tessellation
             // A site only ever borders another within a couple of modules, so the bisectors are taken
             // against the neighbours in a bucket of that size rather than against all of them. The
             // longest bite the background can take sets the bucket.
-            double reach = Math.Max(along * MaxAlongScale, across) * 2.0;
+            double reach = Math.Max(maxAlong, across) * 2.0;
             var buckets = new Dictionary<(int, int), List<int>>();
             for (int i = 0; i < all.Count; i++)
             {

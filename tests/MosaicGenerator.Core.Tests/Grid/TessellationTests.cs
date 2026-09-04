@@ -221,7 +221,10 @@ public class TessellationTests
 
         double flat = Median(flatGaps);
         double edge = Median(edgeGaps);
-        Assert.True(flat > edge * 1.3,
+        // One notch of the size row, not two: the stretch is capped by the piece's proportion — no
+        // longer than about one and a half plates — so a 6 mm bite on a 7 mm plate reaches 8 mm and
+        // stops there. Asking for more here would be asking for the stick that leaves the wedges.
+        Assert.True(flat > edge * 1.2,
             $"flat-background pieces ({flat:F1} mm step) are not larger than the ones on the edge ({edge:F1} mm)");
 
         // The bite lands on the real size row, not an arbitrary length: at least two distinct sizes.

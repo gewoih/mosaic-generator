@@ -36,9 +36,11 @@ public sealed record ModuleChoice
 /// material fixes, so it is the honest yardstick for how wide a joint reads.
 ///
 /// The bite chosen here is a floor, not the size of every piece on the panel: courses on a calm,
-/// low-detail field are stretched longer by the tessellation itself (up to twice this length), and
-/// only courses that follow a real edge — a silhouette, a contour — are cut at exactly this length.
-/// See <c>Tessellation.ResizedAlong</c>.
+/// low-detail field are stretched longer by the tessellation itself, and only courses that follow a
+/// real edge — a silhouette, a contour — are cut at exactly this length. How far that stretch may go
+/// is set by the plate, not by this number: a piece is not let out past about one and a half times
+/// its own width, because a stick will not sit along a curving course. With a 7 mm plate under a
+/// 10 mm bite there is no room left to stretch at all. See <c>Tessellation.ResizedAlong</c>.
 /// </summary>
 public static class ModuleSelector
 {
