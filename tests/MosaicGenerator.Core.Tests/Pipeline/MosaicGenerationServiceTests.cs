@@ -33,15 +33,15 @@ public class MosaicGenerationServiceTests
         Assert.InRange(result.TesseraCount, (int)(1768 * 0.6), (int)(1768 * 1.4));
         Assert.True(result.CutTesseraCount >= 0 && result.CutTesseraCount <= result.TesseraCount);
 
-        using SKBitmap? preview = SKBitmap.Decode(result.PreviewPng);
+        using SKBitmap? cartoon = SKBitmap.Decode(result.CartoonPng);
         using SKBitmap? scheme = SKBitmap.Decode(result.SchemePng);
-        Assert.NotNull(preview);
+        Assert.NotNull(cartoon);
         Assert.NotNull(scheme);
-        Assert.Equal(result.Preview.PixelWidth, preview!.Width);
+        Assert.Equal(result.Cartoon.PixelWidth, cartoon!.Width);
         Assert.Equal(result.Scheme.PixelWidth, scheme!.Width);
 
-        // The scheme is rendered at twice the preview's pixels per step.
-        Assert.True(scheme.Width > preview.Width);
+        // The cartoon is rendered at twice the scheme's pixels per step — it prints 1:1.
+        Assert.True(cartoon.Width > scheme.Width);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class MosaicGenerationServiceTests
         MosaicResult a = _service.Generate(first, request, _palette);
         MosaicResult b = _service.Generate(second, request, _palette);
 
-        Assert.Equal(a.PreviewPng, b.PreviewPng);
+        Assert.Equal(a.CartoonPng, b.CartoonPng);
         Assert.Equal(a.SchemePng, b.SchemePng);
     }
 
@@ -158,7 +158,7 @@ public class MosaicGenerationServiceTests
         MosaicResult lite = _service.Generate(a, lean, _palette);
         MosaicResult full = _service.Generate(b, generous, _palette);
 
-        Assert.Equal(lite.PreviewPng, full.PreviewPng);
+        Assert.Equal(lite.CartoonPng, full.CartoonPng);
         Assert.Equal(lite.Report.TotalModules, full.Report.TotalModules);
         Assert.Equal(lite.Report.TotalMassKg * 1.25, full.Report.TotalMassKg, 1e-9);
     }

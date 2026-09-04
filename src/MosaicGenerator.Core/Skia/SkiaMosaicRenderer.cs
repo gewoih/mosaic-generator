@@ -12,7 +12,7 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
     private static readonly SKColor SchemeOutline = new(0x33, 0x33, 0x33);
     private static readonly SKColor SchemeText = new(0x11, 0x11, 0x11);
 
-    public byte[] RenderPreview(RenderPlan plan)
+    public byte[] RenderCartoon(RenderPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -26,15 +26,9 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
             foreach (RenderedModule module in plan.Modules)
             {
                 var corners = new SKPoint[module.Quad.Length];
-                float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
                 for (int i = 0; i < corners.Length; i++)
                 {
-                    var point = new SKPoint((float)module.Quad[i].X, (float)module.Quad[i].Y);
-                    corners[i] = point;
-                    minX = Math.Min(minX, point.X);
-                    minY = Math.Min(minY, point.Y);
-                    maxX = Math.Max(maxX, point.X);
-                    maxY = Math.Max(maxY, point.Y);
+                    corners[i] = new SKPoint((float)module.Quad[i].X, (float)module.Quad[i].Y);
                 }
 
                 builder.Reset();
@@ -42,25 +36,9 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
 
                 using SKPath path = builder.Detach();
 
-                // A ramp across the face rather than a flat fill: smalt is glossy and slightly
-                // domed, so one edge catches the light and the other falls into shade. The mid
-                // stop is the module's own colour, so the centre still reads true.
-                SKShader? shader = module.GlossLow.ToBytes() == module.GlossHigh.ToBytes()
-                    ? null
-                    : SKShader.CreateLinearGradient(
-                        new SKPoint(minX, minY),
-                        new SKPoint(maxX, maxY),
-                        [ToSKColor(module.GlossLow), ToSKColor(module.FillColor), ToSKColor(module.GlossHigh)],
-                        [0f, 0.5f, 1f],
-                        SKShaderTileMode.Clamp);
-
-                fill.Shader = shader;
                 fill.Color = ToSKColor(module.FillColor);
                 canvas.DrawPath(path, fill);
-                shader?.Dispose();
             }
-
-            fill.Shader = null;
         });
     }
 

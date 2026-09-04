@@ -7,7 +7,7 @@ namespace MosaicGenerator.Core.Pipeline;
 
 public sealed record MosaicResult
 {
-    public required byte[] PreviewPng { get; init; }
+    public required byte[] CartoonPng { get; init; }
 
     public required byte[] SchemePng { get; init; }
 
@@ -17,7 +17,7 @@ public sealed record MosaicResult
 
     public required Palette Palette { get; init; }
 
-    public required RenderPlan Preview { get; init; }
+    public required RenderPlan Cartoon { get; init; }
 
     public required RenderPlan Scheme { get; init; }
 

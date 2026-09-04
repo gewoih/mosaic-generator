@@ -84,17 +84,17 @@
 
 <section class="outputs">
     <figure>
-        <img src="@Url.Action("Preview", new { id })" alt="Превью макета" />
+        <img src="@Url.Action("Cartoon", new { id })" alt="Картон под набор" />
         <figcaption>
-            <strong>Превью макета</strong>
-            <span>@stored.PreviewWidthPx × @stored.PreviewHeightPx px, @stored.PreviewDpi.ToString("0", ru) dpi</span>
-            <a class="button button--small" href="@Url.Action("Preview", new { id, download = true })">Скачать PNG</a>
+            <strong>Картон под набор</strong>
+            <span>@stored.CartoonWidthPx × @stored.CartoonHeightPx px, @stored.CartoonDpi.ToString("0", ru) dpi</span>
+            <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })">Скачать PNG</a>
         </figcaption>
     </figure>
     <figure>
-        <img src="@Url.Action("Scheme", new { id })" alt="Схема под работу" />
+        <img src="@Url.Action("Scheme", new { id })" alt="Схема для разбора раскладки" />
         <figcaption>
-            <strong>Схема под работу</strong>
+            <strong>Схема (для разбора раскладки)</strong>
             <span>@stored.SchemeWidthPx × @stored.SchemeHeightPx px, @stored.SchemeDpi.ToString("0", ru) dpi</span>
             <a class="button button--small" href="@Url.Action("Scheme", new { id, download = true })">Скачать PNG</a>
         </figcaption>

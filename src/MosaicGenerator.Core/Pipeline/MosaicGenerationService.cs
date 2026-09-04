@@ -106,17 +106,17 @@ public sealed class MosaicGenerationService(
         var plan = new MosaicPlan(layout, palette, finalIndices, request.EffectiveSeed, tesserae);
         MaterialReport report = MaterialCalculator.Calculate(plan, request.WasteFactor, request.PricePerKgRub);
 
-        RenderPlan preview = RenderGeometry.Compute(plan, _options.Preview);
+        RenderPlan cartoon = RenderGeometry.Compute(plan, _options.Cartoon);
         RenderPlan scheme = RenderGeometry.Compute(plan, _options.Scheme);
 
         return new MosaicResult
         {
-            PreviewPng = _renderer.RenderPreview(preview),
+            CartoonPng = _renderer.RenderCartoon(cartoon),
             SchemePng = _renderer.RenderScheme(scheme, report),
             Report = report,
             Layout = layout,
             Palette = palette,
-            Preview = preview,
+            Cartoon = cartoon,
             Scheme = scheme,
             ColorsBeforeReduction = reduction.ColorsBefore,
             ModulesReassigned = reduction.ModulesReassigned,

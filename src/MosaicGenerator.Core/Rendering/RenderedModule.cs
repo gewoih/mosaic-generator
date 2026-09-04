@@ -15,21 +15,15 @@ public sealed class RenderedModule
     /// <summary>A partial tessera — clipped by the field edge or squeezed where courses converge.</summary>
     public required bool IsCut { get; init; }
 
-    /// <summary>Axis-aligned bounds of the nominal outline in output pixels, before shaping.</summary>
+    /// <summary>Axis-aligned bounds of the outline in output pixels.</summary>
     public required RectD Bounds { get; init; }
 
-    /// <summary>Centre of the nominal outline in output pixels.</summary>
+    /// <summary>Centre of the outline in output pixels.</summary>
     public required PointD Centroid { get; init; }
 
-    /// <summary>Shaped outline in output pixels: chipped, resized and rotated off-square.</summary>
+    /// <summary>The tessera outline in output pixels, clamped to the field.</summary>
     public required PointD[] Quad { get; init; }
 
-    /// <summary>Palette colour with this module's tone jitter applied — the face's mid value.</summary>
+    /// <summary>Flat article colour of this module.</summary>
     public required Rgb FillColor { get; init; }
-
-    /// <summary>Shaded edge of the glossy face. Equal to <see cref="FillColor"/> when gloss is off.</summary>
-    public required Rgb GlossLow { get; init; }
-
-    /// <summary>Lit edge of the glossy face. Equal to <see cref="FillColor"/> when gloss is off.</summary>
-    public required Rgb GlossHigh { get; init; }
 }

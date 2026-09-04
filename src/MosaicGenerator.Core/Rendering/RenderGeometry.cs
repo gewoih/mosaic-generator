@@ -48,12 +48,10 @@ public static class RenderGeometry
             RectD bounds = BoundsOf(nominal);
             areas.Add(bounds.Width * bounds.Height);
 
-            var random = new DeterministicRandom(plan.Seed, tessera.CourseId, tessera.IndexInCourse);
             int colorIndex = plan.ColorIndices[i];
             CieLab lab = plan.Palette.Colors[colorIndex].Lab;
 
-            PointD[] quad = Shape(nominal, options, originX, fieldRight, originY, fieldBottom, ref random);
-            (Rgb fill, Rgb low, Rgb high) = FaceColours(lab, options, ref random);
+            PointD[] quad = Clamp(nominal, originX, fieldRight, originY, fieldBottom);
 
             modules.Add(new RenderedModule
             {
@@ -66,9 +64,7 @@ public static class RenderGeometry
                     originX + (tessera.Centroid.X * pixelsPerMm),
                     originY + (tessera.Centroid.Y * pixelsPerMm)),
                 Quad = quad,
-                FillColor = fill,
-                GlossLow = low,
-                GlossHigh = high,
+                FillColor = lab.ToRgb().Clamped(),
             });
         }
 
@@ -131,60 +127,18 @@ public static class RenderGeometry
         return new RectD(minX, minY, maxX - minX, maxY - minY);
     }
 
-    /// <summary>
-    /// The tessera outline: the nominal shape resized a little about its centre, each vertex
-    /// chipped by an independent signed amount, then the whole shape turned off-square. All
-    /// amplitudes are fractions of the module, so a coarse panel is not rougher than a fine one.
-    /// The draw order is fixed (size, then vertices, then rotation) so a seed reproduces the shape.
-    /// </summary>
-    private static PointD[] Shape(
-        PointD[] nominal,
-        RenderOptions options,
-        double fieldLeft,
-        double fieldRight,
-        double fieldTop,
-        double fieldBottom,
-        ref DeterministicRandom random)
+    /// <summary>The nominal outline in output pixels, each vertex held inside the field.</summary>
+    private static PointD[] Clamp(
+        PointD[] nominal, double fieldLeft, double fieldRight, double fieldTop, double fieldBottom)
     {
-        RectD bounds = BoundsOf(nominal);
-        double cx = bounds.X + (bounds.Width / 2.0);
-        double cy = bounds.Y + (bounds.Height / 2.0);
-
-        double scale = 1.0 + (random.NextSigned() * options.SizeJitter);
-        double roughX = bounds.Width * options.EdgeRoughness;
-        double roughY = bounds.Height * options.EdgeRoughness;
-        double angle = random.NextSigned() * options.RotationJitterDeg * Math.PI / 180.0;
-        double cos = Math.Cos(angle);
-        double sin = Math.Sin(angle);
-
-        var shaped = new PointD[nominal.Length];
+        var clamped = new PointD[nominal.Length];
         for (int i = 0; i < nominal.Length; i++)
         {
-            double lx = ((nominal[i].X - cx) * scale) + (random.NextSigned() * roughX);
-            double ly = ((nominal[i].Y - cy) * scale) + (random.NextSigned() * roughY);
-
-            double x = cx + (lx * cos) - (ly * sin);
-            double y = cy + (lx * sin) + (ly * cos);
-            shaped[i] = new PointD(
-                Math.Clamp(x, fieldLeft, fieldRight),
-                Math.Clamp(y, fieldTop, fieldBottom));
+            clamped[i] = new PointD(
+                Math.Clamp(nominal[i].X, fieldLeft, fieldRight),
+                Math.Clamp(nominal[i].Y, fieldTop, fieldBottom));
         }
 
-        return shaped;
-    }
-
-    /// <summary>
-    /// The face's three lightnesses: a mid value with the per-module tone offset, and a lit and a
-    /// shaded edge for the gloss ramp. Shifts happen in L* so equal steps look equal across the
-    /// palette; a and b are left alone so the tessera still reads as its colour.
-    /// </summary>
-    private static (Rgb Fill, Rgb Low, Rgb High) FaceColours(
-        CieLab lab, RenderOptions options, ref DeterministicRandom random)
-    {
-        double mid = Math.Clamp(lab.L + (random.NextSigned() * options.ToneJitter), 0.0, 100.0);
-
-        Rgb At(double l) => new CieLab(Math.Clamp(l, 0.0, 100.0), lab.A, lab.B).ToRgb().Clamped();
-
-        return (At(mid), At(mid - options.GlossJitter), At(mid + options.GlossJitter));
+        return clamped;
     }
 }

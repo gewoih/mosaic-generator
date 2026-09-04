@@ -65,15 +65,15 @@ public sealed record StoredResult
 
     public required int ModulesReassigned { get; init; }
 
-    public required int PreviewWidthPx { get; init; }
+    public required int CartoonWidthPx { get; init; }
 
-    public required int PreviewHeightPx { get; init; }
+    public required int CartoonHeightPx { get; init; }
 
     public required int SchemeWidthPx { get; init; }
 
     public required int SchemeHeightPx { get; init; }
 
-    public required double PreviewDpi { get; init; }
+    public required double CartoonDpi { get; init; }
 
     public required double SchemeDpi { get; init; }
 

@@ -35,7 +35,7 @@ public sealed class TempResultStore : IResultStore
         Directory.CreateDirectory(_root);
     }
 
-    public string Save(StoredResult result, byte[] previewPng, byte[] schemePng)
+    public string Save(StoredResult result, byte[] cartoonPng, byte[] schemePng)
     {
         ArgumentNullException.ThrowIfNull(result);
 
@@ -45,7 +45,7 @@ public sealed class TempResultStore : IResultStore
         string directory = Path.Combine(_root, id);
         Directory.CreateDirectory(directory);
 
-        File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Preview)), previewPng);
+        File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Cartoon)), cartoonPng);
         File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Scheme)), schemePng);
         File.WriteAllText(
             Path.Combine(directory, ManifestFileName),
@@ -76,7 +76,7 @@ public sealed class TempResultStore : IResultStore
         TryResolve(id, FileNameFor(image), out string? path) ? File.ReadAllBytes(path) : null;
 
     private static string FileNameFor(ResultImage image) =>
-        image == ResultImage.Preview ? "preview.png" : "scheme.png";
+        image == ResultImage.Cartoon ? "cartoon.png" : "scheme.png";
 
     /// <summary>
     /// Resolves an id supplied by the client. The id must be a bare GUID and the resolved path is

@@ -20,7 +20,7 @@ public sealed class MosaicOptions
     public long MaxDecodedPixels { get; set; } = 24_000_000;
 
     [Range(4, 200)]
-    public int PreviewPixelsPerStep { get; set; } = 24;
+    public int CartoonPixelsPerStep { get; set; } = 96;
 
     [Range(8, 200)]
     public int SchemePixelsPerStep { get; set; } = 48;

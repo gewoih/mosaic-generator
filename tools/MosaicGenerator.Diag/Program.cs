@@ -15,7 +15,7 @@ namespace MosaicGenerator.Diag;
 
 /// <summary>
 /// Runs one photograph through the whole pipeline over a matrix of panel sizes and bite lengths,
-/// writes every preview and scheme out as PNG, and measures what the eye cannot count. A layout
+/// writes every cartoon and scheme out as PNG, and measures what the eye cannot count. A layout
 /// that looks right on a synthetic disc says nothing about a photograph, and there was no way to
 /// get numbers out of the web app.
 /// </summary>
@@ -153,7 +153,7 @@ internal static class Program
             MosaicResult result = service.Generate(new MemoryStream(bytes), request, palette);
             watch.Stop();
 
-            File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-preview.png"), result.PreviewPng);
+            File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-cartoon.png"), result.CartoonPng);
             File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-scheme.png"), result.SchemePng);
 
             // Recomputed rather than plumbed out of the service: every step is deterministic, so

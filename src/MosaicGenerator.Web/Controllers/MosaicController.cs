@@ -117,7 +117,7 @@ public sealed class MosaicController(
         }
 
         string id = results.Save(
-            Describe(result, form, palette, choice, sourceId), result.PreviewPng, result.SchemePng);
+            Describe(result, form, palette, choice, sourceId), result.CartoonPng, result.SchemePng);
 
         logger.LogInformation(
             "Generated {Columns}x{Rows} pieces of {Along}x{Across} mm from {Palette}, " +
@@ -177,9 +177,9 @@ public sealed class MosaicController(
         });
     }
 
-    [HttpGet("result/{id}/preview.png")]
-    public IActionResult Preview(string id, bool download = false) =>
-        Image(id, ResultImage.Preview, download, "maket.png");
+    [HttpGet("result/{id}/cartoon.png")]
+    public IActionResult Cartoon(string id, bool download = false) =>
+        Image(id, ResultImage.Cartoon, download, "karton.png");
 
     [HttpGet("result/{id}/scheme.png")]
     public IActionResult Scheme(string id, bool download = false) =>
@@ -256,9 +256,9 @@ public sealed class MosaicController(
         MaxColors = form.MaxColors,
         ColorsBeforeReduction = result.ColorsBeforeReduction,
         ModulesReassigned = result.ModulesReassigned,
-        PreviewWidthPx = result.Preview.PixelWidth,
-        PreviewHeightPx = result.Preview.PixelHeight,
-        PreviewDpi = result.Preview.Dpi,
+        CartoonWidthPx = result.Cartoon.PixelWidth,
+        CartoonHeightPx = result.Cartoon.PixelHeight,
+        CartoonDpi = result.Cartoon.Dpi,
         SchemeWidthPx = result.Scheme.PixelWidth,
         SchemeHeightPx = result.Scheme.PixelHeight,
         SchemeDpi = result.Scheme.Dpi,

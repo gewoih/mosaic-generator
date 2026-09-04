@@ -78,9 +78,9 @@ builder.Services.AddSingleton(provider =>
             MaxDecodedPixels = options.MaxDecodedPixels,
         },
         ValidationLimits = new ValidationLimits(),
-        Preview = RenderOptions.Preview with
+        Cartoon = RenderOptions.Cartoon with
         {
-            PixelsPerStep = options.PreviewPixelsPerStep,
+            PixelsPerStep = options.CartoonPixelsPerStep,
             MaxLongSidePx = options.MaxLongSidePx,
             MaxTotalPixels = options.MaxTotalPixels,
         },

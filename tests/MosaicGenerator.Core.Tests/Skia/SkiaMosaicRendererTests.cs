@@ -14,11 +14,11 @@ public class SkiaMosaicRendererTests
     private readonly SkiaMosaicRenderer _renderer = new();
 
     [Fact]
-    public void ThePreviewIsAValidPngOfTheExpectedSize()
+    public void TheCartoonIsAValidPngOfTheExpectedSize()
     {
         RenderPlan plan = Plan();
 
-        byte[] png = _renderer.RenderPreview(plan);
+        byte[] png = _renderer.RenderCartoon(plan);
 
         using SKBitmap? decoded = SKBitmap.Decode(png);
         Assert.NotNull(decoded);
@@ -32,7 +32,7 @@ public class SkiaMosaicRendererTests
         // 300 x 200 mm at a 23 mm step leaves a 2 mm margin, so the corner pixel is bare joint.
         RenderPlan plan = Plan();
 
-        using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderPreview(plan))!;
+        using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderCartoon(plan))!;
 
         SKColor corner = decoded.GetPixel(0, 0);
         Assert.Equal(plan.JointColor.ToBytes(), (corner.Red, corner.Green, corner.Blue));
@@ -44,9 +44,9 @@ public class SkiaMosaicRendererTests
         // Same white adhesive either way. A 1 mm slot beside 8 mm tesserae is a deep, narrow
         // crack that almost nothing reaches; a 3 mm one is open enough to stay mid grey.
         RenderPlan fine = RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 5, module: 4, grout: 1), RenderOptions.Preview);
+            PlanFactory.Striped(seed: 5, module: 4, grout: 1), RenderOptions.Cartoon);
         RenderPlan coarse = RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 5, module: 20, grout: 3), RenderOptions.Preview);
+            PlanFactory.Striped(seed: 5, module: 20, grout: 3), RenderOptions.Cartoon);
 
         Assert.True(
             fine.JointColor.ToLab().L < coarse.JointColor.ToLab().L - 10,
@@ -58,23 +58,20 @@ public class SkiaMosaicRendererTests
     }
 
     [Fact]
-    public void ThePreviewPaintsModulesInPaletteColours()
+    public void TheCartoonPaintsEachModuleFlatInItsPaletteColour()
     {
         RenderPlan plan = Plan();
 
-        using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderPreview(plan))!;
+        using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderCartoon(plan))!;
 
         RenderedModule module = plan.Modules.Single(m => m is { Row: 2, Column: 3 });
         SKColor centre = decoded.GetPixel(
             (int)(module.Bounds.X + (module.Bounds.Width / 2)),
             (int)(module.Bounds.Y + (module.Bounds.Height / 2)));
 
-        // The face carries a gloss ramp, so the centre is near the module's colour rather than
-        // exactly it — the mid gradient stop sits at the shape's centre, not the footprint's.
+        // Flat fill: the centre of the module is exactly its article colour.
         (byte r, byte g, byte b) = module.FillColor.ToBytes();
-        Assert.InRange(centre.Red, r - 12, r + 12);
-        Assert.InRange(centre.Green, g - 12, g + 12);
-        Assert.InRange(centre.Blue, b - 12, b + 12);
+        Assert.Equal((r, g, b), (centre.Red, centre.Green, centre.Blue));
     }
 
     [Fact]
@@ -113,18 +110,18 @@ public class SkiaMosaicRendererTests
     public void BothOutputsCarryThePhysicalScale()
     {
         MosaicPlan plan = PlanFactory.Striped(seed: 5);
-        RenderPlan preview = RenderGeometry.Compute(plan, RenderOptions.Preview);
+        RenderPlan cartoon = RenderGeometry.Compute(plan, RenderOptions.Cartoon);
         RenderPlan scheme = RenderGeometry.Compute(plan, RenderOptions.Scheme);
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 1500m);
 
-        double? previewScale = PngMetadata.ReadPhysicalScale(_renderer.RenderPreview(preview));
+        double? cartoonScale = PngMetadata.ReadPhysicalScale(_renderer.RenderCartoon(cartoon));
         double? schemeScale = PngMetadata.ReadPhysicalScale(_renderer.RenderScheme(scheme, report));
 
-        Assert.Equal(preview.PixelsPerMm, previewScale!.Value, 1e-3);
+        Assert.Equal(cartoon.PixelsPerMm, cartoonScale!.Value, 1e-3);
         Assert.Equal(scheme.PixelsPerMm, schemeScale!.Value, 1e-3);
 
-        // The scheme is rendered at twice the preview's resolution.
-        Assert.True(schemeScale.Value > previewScale.Value);
+        // The cartoon is rendered at twice the scheme's resolution — it prints 1:1.
+        Assert.True(cartoonScale.Value > schemeScale.Value);
     }
 
     [Fact]
@@ -133,9 +130,9 @@ public class SkiaMosaicRendererTests
         RenderPlan first = Plan();
         RenderPlan second = Plan();
 
-        Assert.Equal(_renderer.RenderPreview(first), _renderer.RenderPreview(second));
+        Assert.Equal(_renderer.RenderCartoon(first), _renderer.RenderCartoon(second));
     }
 
     private static RenderPlan Plan() =>
-        RenderGeometry.Compute(PlanFactory.Striped(seed: 5), RenderOptions.Preview);
+        RenderGeometry.Compute(PlanFactory.Striped(seed: 5), RenderOptions.Cartoon);
 }

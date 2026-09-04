@@ -10,7 +10,7 @@ public sealed record MosaicGenerationOptions
 
     public ValidationLimits ValidationLimits { get; init; } = new();
 
-    public RenderOptions Preview { get; init; } = RenderOptions.Preview;
+    public RenderOptions Cartoon { get; init; } = RenderOptions.Cartoon;
 
     public RenderOptions Scheme { get; init; } = RenderOptions.Scheme;
 }
