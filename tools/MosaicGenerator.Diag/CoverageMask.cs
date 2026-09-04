@@ -123,6 +123,29 @@ internal sealed class CoverageMask
             (double)gaps.Length / d.Length);
     }
 
+    /// <summary>
+    /// Every raster point sitting in a gap wider than <paramref name="wideMm"/> — the same fine
+    /// raster and the same doubled-clearance measure <see cref="JointWidths"/> reports, but keeping
+    /// where each one is rather than only how wide. What пункт 6 calls a hole, located.
+    /// </summary>
+    public static IReadOnlyList<PointD> WideGapPoints(
+        MosaicLayout layout, IReadOnlyList<Tessera> tesserae, double wideMm)
+    {
+        CoverageMask fine = Rasterise(layout, tesserae, layout.ModuleWidthMm / 40.0);
+        double[] d = fine.Clearance();
+        var found = new List<PointD>();
+        for (int i = 0; i < d.Length; i++)
+        {
+            if (2.0 * d[i] * fine._cell > wideMm)
+            {
+                found.Add(new PointD(
+                    ((i % fine._w) + 0.5) * fine._cell, ((i / fine._w) + 0.5) * fine._cell));
+            }
+        }
+
+        return found;
+    }
+
     private static bool Contains(IReadOnlyList<PointD> polygon, double x, double y)
     {
         bool inside = false;

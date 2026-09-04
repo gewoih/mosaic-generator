@@ -53,12 +53,17 @@ internal static class Program
             var other => throw new ArgumentException($"неизвестная метрика '{other}' (cie76 | ciede2000)"),
         };
 
+        // Why the courses came out as they did: seeding, what stopped each streamline, and whether
+        // the extra vertices and the wide gaps sit at the ends of courses. Off by default — it makes
+        // the placer log every attempt.
+        bool autopsy = args.Contains("--why");
+
         if (photo is null || !File.Exists(photo))
         {
             Console.Error.WriteLine(
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
                 "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
-                "[--metric cie76|ciede2000]");
+                "[--metric cie76|ciede2000] [--why]");
             return 1;
         }
 
@@ -156,13 +161,15 @@ internal static class Program
                 image.Width, image.Height, layout.FieldAspect, request.CropAnchorX, request.CropAnchorY);
             DirectionField field = DirectionField.Compute(
                 image, crop, layout.FieldAspect, DirectionField.ResolutionFor(layout));
-            Array.Clear(Tessellation.BreakReasons);
+            LayoutDiagnostics.Reset();
+            LayoutDiagnostics.Enabled = autopsy;
             IReadOnlyList<Tessera> tesserae = Tessellation.Advected(layout, field);
+            IReadOnlyList<PointD[]> contours = ContourSet.Extract(
+                field, layout.FieldWidthMm, layout.FieldHeightMm, layout.ModuleWidthMm);
             CourseGuidance guidance = CourseGuidance.Build(
-                field, layout.FieldWidthMm, layout.FieldHeightMm,
-                ContourSet.Extract(field, layout.FieldWidthMm, layout.FieldHeightMm, layout.ModuleWidthMm),
+                field, layout.FieldWidthMm, layout.FieldHeightMm, contours,
                 layout.ModuleWidthMm, layout.ModuleHeightMm + layout.GroutWidthMm);
-            int[] why = [.. Tessellation.BreakReasons];
+            int[] why = [.. LayoutDiagnostics.BreakReasons];
             int whyTotal = Math.Max(1, why.Sum());
             Console.WriteLine(
                 $"  обрывы курса: край {why[0] * 100.0 / whyTotal:0}%  " +
@@ -280,27 +287,31 @@ internal static class Program
             }
 
             {
-                IReadOnlyList<PointD[]> cs = ContourSet.Extract(
-                    field, layout.FieldWidthMm, layout.FieldHeightMm, layout.ModuleWidthMm);
-                double[] lens = [.. cs.Select(c => Geometry.PolylineLength(c) / layout.ModuleWidthMm).OrderDescending()];
+                double[] lens = [.. contours.Select(c => Geometry.PolylineLength(c) / layout.ModuleWidthMm).OrderDescending()];
                 Console.WriteLine(
-                    $"  контуров {cs.Count}" +
+                    $"  контуров {contours.Count}" +
                     (lens.Length > 0
                         ? $", длины в модулях: {string.Join(", ", lens.Take(6).Select(l => l.ToString("0")))}"
                           + (lens.Length > 6 ? $" … (ещё {lens.Length - 6})" : string.Empty)
                         : string.Empty));
 
-                // Border rings plus two rows per contour are laid first, so their course ids are the
-                // lowest. Everything with a higher id came out of the streamline fill. The border
-                // ring count now varies with panel size.
+                // The structural courses are laid first and hold the lowest ids; everything above
+                // came out of the streamline fill. Asked of the layout rather than re-derived here:
+                // counting two rows per contour overstated it on every panel under 30 cm, where the
+                // silhouette gets one.
                 int borderRings = Tessellation.BorderCourseCount(layout);
-                int structural = borderRings + (cs.Count * 2);
+                int structural = Tessellation.StructuralCourseCount(layout, field, contours);
                 int inStructural = tesserae.Count(t => t.CourseId >= 0 && t.CourseId < structural);
                 int inBorder = tesserae.Count(t => t.CourseId >= 0 && t.CourseId < borderRings);
                 Console.WriteLine(
                     $"  кусков в бордюре {inBorder * 100.0 / tesserae.Count:0.0}%, " +
                     $"в контурных курсах {(inStructural - inBorder) * 100.0 / tesserae.Count:0.0}%, " +
                     $"в заливке {(tesserae.Count - inStructural) * 100.0 / tesserae.Count:0.0}%");
+            }
+
+            if (autopsy)
+            {
+                CourseAutopsy.Report(layout, tesserae, field, contours);
             }
 
             CoverageMask mask = CoverageMask.Rasterise(layout, tesserae);

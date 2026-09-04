@@ -20,13 +20,6 @@ namespace MosaicGenerator.Core.Grid;
 /// </summary>
 public static class Tessellation
 {
-    /// <summary>
-    /// Diagnostic only: why streamlines stopped, in the order
-    /// {out of field, spacing, self-intersection, curvature, step budget}. Reset by the bench
-    /// before a run and read after it; nothing in the pipeline looks at it.
-    /// </summary>
-    public static readonly int[] BreakReasons = new int[5];
-
     // The share of the field a *second* laid border course may add. One course is always laid where
     // the panel can carry it — it holds the composition and the fill is seeded off it, and dropping
     // it entirely leaves the perimeter as a field of orphan wedges (filler 8 % -> 35 % on a 15 cm
@@ -240,7 +233,10 @@ public static class Tessellation
         var sites = new List<(PointD Centre, PointD Tangent, double AlongMm, int CourseId, int Index)>();
         for (int c = 0; c < courses.Count; c++)
         {
-            AddSites(courses[c], sites, resize: variableAlong && c >= structuralCourses);
+            AddSites(
+                courses[c], sites,
+                resize: variableAlong && c >= structuralCourses,
+                structural: c < structuralCourses);
         }
 
         // 5. Two corrections, alternating until they settle.
@@ -274,10 +270,14 @@ public static class Tessellation
             IReadOnlyList<(PointD Point, double RadiusMm)> holes = mask.BarePoints(module * 0.3);
             if (holes.Count == 0)
             {
+                LayoutDiagnostics.Record(
+                    new LayoutDiagnostics.Repair(pass, merged, 0, 0, 0));
                 break;
             }
 
             int added = 0;
+            int grownCourses = 0;
+            int fillers = 0;
             foreach ((PointD hole, double _) in holes)
             {
                 if (mask.IsCovered(hole) || TooCloseToASite(hole, sites, dAcross * 0.7))
@@ -287,12 +287,13 @@ public static class Tessellation
 
                 if (pass == 0)
                 {
-                    List<PointD> grown = placer.Trace(hole, dAcross * 0.5);
+                    List<PointD> grown = placer.Trace(hole, dAcross * 0.5, minLength * 0.5);
                     if (PolylineLength(grown) >= minLength * 0.5)
                     {
-                        placer.RegisterBarrier(grown, integStep);
-                        AddSites([.. grown], sites, resize: false);
+                        placer.RegisterBarrier(grown, integStep, structural: false);
+                        AddSites([.. grown], sites, resize: false, structural: false);
                         added++;
+                        grownCourses++;
                         continue;
                     }
                 }
@@ -300,7 +301,11 @@ public static class Tessellation
                 double theta = guidance.ThetaAt(hole.X / fieldWidth, hole.Y / fieldHeight);
                 sites.Add((hole, new PointD(Math.Cos(theta), Math.Sin(theta)), along, nextFillerId--, 0));
                 added++;
+                fillers++;
             }
+
+            LayoutDiagnostics.Record(
+                new LayoutDiagnostics.Repair(pass, merged, holes.Count, grownCourses, fillers));
 
             if (added == 0 && merged == 0)
             {
@@ -342,7 +347,8 @@ public static class Tessellation
         void AddSites(
             PointD[] course,
             List<(PointD Centre, PointD Tangent, double AlongMm, int CourseId, int Index)> into,
-            bool resize)
+            bool resize,
+            bool structural)
         {
             double length = PolylineLength(course);
             int courseId = nextCourseId++;
@@ -366,6 +372,8 @@ public static class Tessellation
                     into.Add((centre, tangent, courseAlong, courseId, i));
                 }
 
+                LayoutDiagnostics.Record(
+                    new LayoutDiagnostics.Course(courseId, length, courseAlong, n, structural));
                 return;
             }
 
@@ -374,6 +382,8 @@ public static class Tessellation
             {
                 (PointD only, PointD heading) = SampleAlong(course, length / 2.0);
                 into.Add((only, heading, courseAlong, courseId, 0));
+                LayoutDiagnostics.Record(
+                    new LayoutDiagnostics.Course(courseId, length, courseAlong, 1, structural));
                 return;
             }
 
@@ -383,6 +393,9 @@ public static class Tessellation
                 (PointD centre, PointD tangent) = SampleAlong(course, halfLocal + (i * usable / (count - 1)));
                 into.Add((centre, tangent, courseAlong, courseId, i));
             }
+
+            LayoutDiagnostics.Record(
+                new LayoutDiagnostics.Course(courseId, length, courseAlong, count, structural));
         }
 
         // Mean edge strength under the course sets the bite: field this strong is a form and holds the
@@ -544,21 +557,29 @@ public static class Tessellation
     {
         private double _dTestActive = dTest;
 
-        private readonly Dictionary<(int, int), List<PointD>> _points = [];
-        private readonly Queue<PointD> _seeds = new();
+        private readonly Dictionary<(int, int), List<(PointD Point, bool Structural)>> _points = [];
+        private readonly Queue<(PointD Point, LayoutDiagnostics.Seeding Source)> _seeds = new();
+        private LayoutDiagnostics.Stop _lastForward;
+        private LayoutDiagnostics.Stop _lastBackward;
 
         /// <summary>
         /// A streamline from <paramref name="seed"/> with the spacing check relaxed to
         /// <paramref name="testDistance"/>, so a course can be grown into a gap the ordinary spacing
         /// would refuse.
         /// </summary>
-        public List<PointD> Trace(PointD seed, double testDistance)
+        public List<PointD> Trace(PointD seed, double testDistance, double keepIfLongerThan)
         {
             double previous = _dTestActive;
             _dTestActive = testDistance;
             try
             {
-                return Integrate(seed);
+                double nearest = LayoutDiagnostics.Enabled ? Nearest(seed).Distance : 0.0;
+                List<PointD> path = Integrate(seed);
+                Note(
+                    LayoutDiagnostics.Seeding.Hole, path,
+                    accepted: ArcLength(path) >= keepIfLongerThan,
+                    keepIfLongerThan, nearest);
+                return path;
             }
             finally
             {
@@ -566,12 +587,12 @@ public static class Tessellation
             }
         }
 
-        public void RegisterBarrier(IReadOnlyList<PointD> polyline, double spacing)
+        public void RegisterBarrier(IReadOnlyList<PointD> polyline, double spacing, bool structural = true)
         {
             double length = PolylineLength(polyline);
             for (double s = 0.0; s <= length; s += spacing)
             {
-                Add(SampleAlong(polyline, s).Centre);
+                Add(SampleAlong(polyline, s).Centre, structural);
             }
         }
 
@@ -583,14 +604,17 @@ public static class Tessellation
                 (PointD centre, PointD tangent) = SampleAlong(polyline, s);
                 double nx = -tangent.Y;
                 double ny = tangent.X;
-                _seeds.Enqueue(new PointD(centre.X + (nx * step), centre.Y + (ny * step)));
-                _seeds.Enqueue(new PointD(centre.X - (nx * step), centre.Y - (ny * step)));
+                _seeds.Enqueue((new PointD(centre.X + (nx * step), centre.Y + (ny * step)),
+                    LayoutDiagnostics.Seeding.Structural));
+                _seeds.Enqueue((new PointD(centre.X - (nx * step), centre.Y - (ny * step)),
+                    LayoutDiagnostics.Seeding.Structural));
             }
         }
 
         public IReadOnlyList<List<PointD>> Place(double minLength)
         {
-            _seeds.Enqueue(new PointD(fieldWidth / 2.0, fieldHeight / 2.0));
+            _seeds.Enqueue((new PointD(fieldWidth / 2.0, fieldHeight / 2.0),
+                LayoutDiagnostics.Seeding.Structural));
 
             var courses = new List<List<PointD>>();
             Drain(courses, minLength);
@@ -603,7 +627,7 @@ public static class Tessellation
                     var p = new PointD(x, y);
                     if (!TooClose(p, dSeed))
                     {
-                        _seeds.Enqueue(p);
+                        _seeds.Enqueue((p, LayoutDiagnostics.Seeding.Sweep));
                     }
                 }
             }
@@ -617,22 +641,27 @@ public static class Tessellation
             int guard = 0;
             while (_seeds.Count > 0 && guard++ < 400_000)
             {
-                PointD seed = _seeds.Dequeue();
+                (PointD seed, LayoutDiagnostics.Seeding source) = _seeds.Dequeue();
                 if (!Inside(seed) || TooClose(seed, dSeed))
                 {
+                    LayoutDiagnostics.SeedRejected(source);
                     continue;
                 }
 
+                double nearest = LayoutDiagnostics.Enabled ? Nearest(seed).Distance : 0.0;
                 List<PointD> course = Integrate(seed);
                 if (ArcLength(course) < minLength)
                 {
+                    Note(source, course, accepted: false, minLength, nearest);
                     continue;
                 }
+
+                Note(source, course, accepted: true, minLength, nearest);
 
                 double length = ArcLength(course);
                 for (double s = 0.0; s <= length; s += integStep)
                 {
-                    Add(SampleAlong(course, s).Centre);
+                    Add(SampleAlong(course, s).Centre, structural: false);
                 }
 
                 courses.Add(course);
@@ -642,23 +671,60 @@ public static class Tessellation
                     (PointD centre, PointD tangent) = SampleAlong(course, s);
                     double nx = -tangent.Y;
                     double ny = tangent.X;
-                    _seeds.Enqueue(new PointD(centre.X + (nx * dSep), centre.Y + (ny * dSep)));
-                    _seeds.Enqueue(new PointD(centre.X - (nx * dSep), centre.Y - (ny * dSep)));
+                    _seeds.Enqueue((new PointD(centre.X + (nx * dSep), centre.Y + (ny * dSep)),
+                        LayoutDiagnostics.Seeding.Offset));
+                    _seeds.Enqueue((new PointD(centre.X - (nx * dSep), centre.Y - (ny * dSep)),
+                        LayoutDiagnostics.Seeding.Offset));
                 }
             }
+        }
+
+        /// <summary>
+        /// Logs one attempt for the bench: what it was seeded from, how far it got, and — when it
+        /// stopped on spacing — whether the thing in its way was a structural course or another
+        /// piece of fill. The blocker is looked up only here, once per streamline, so the check
+        /// inside the integration loop stays the cheap one.
+        /// </summary>
+        private void Note(
+            LayoutDiagnostics.Seeding source,
+            List<PointD> path,
+            bool accepted,
+            double minLength,
+            double nearestAtSeed)
+        {
+            if (!LayoutDiagnostics.Enabled)
+            {
+                return;
+            }
+
+            LayoutDiagnostics.Blocker blocker = LayoutDiagnostics.Blocker.None;
+            if (_lastForward == LayoutDiagnostics.Stop.Spacing || _lastBackward == LayoutDiagnostics.Stop.Spacing)
+            {
+                PointD end = _lastForward == LayoutDiagnostics.Stop.Spacing ? path[^1] : path[0];
+                blocker = Nearest(end).Kind;
+            }
+
+            LayoutDiagnostics.Record(new LayoutDiagnostics.Attempt(
+                source, accepted, ArcLength(path), minLength,
+                _lastForward, _lastBackward, blocker,
+                double.IsPositiveInfinity(nearestAtSeed) ? -1.0 : nearestAtSeed));
         }
 
         private List<PointD> Integrate(PointD seed)
         {
             double theta = guide(seed.X / fieldWidth, seed.Y / fieldHeight);
             var forward = IntegrateHalf(seed, new PointD(Math.Cos(theta), Math.Sin(theta)));
+            _lastForward = _lastStop;
             var backward = IntegrateHalf(seed, new PointD(-Math.Cos(theta), -Math.Sin(theta)));
+            _lastBackward = _lastStop;
 
             backward.Reverse();
             backward.Add(seed);
             backward.AddRange(forward);
             return backward;
         }
+
+        private LayoutDiagnostics.Stop _lastStop;
 
         private List<PointD> IntegrateHalf(PointD start, PointD heading)
         {
@@ -689,7 +755,7 @@ public static class Tessellation
                 {
                     if (++clamped > clampBudget)
                     {
-                        Interlocked.Increment(ref BreakReasons[3]);
+                        Stopped(LayoutDiagnostics.Stop.Curvature);
                         break;
                     }
 
@@ -707,19 +773,19 @@ public static class Tessellation
 
                 if (nx < 0.0 || nx > fieldWidth || ny < 0.0 || ny > fieldHeight)
                 {
-                    Interlocked.Increment(ref BreakReasons[0]);
+                    Stopped(LayoutDiagnostics.Stop.Edge);
                     break;
                 }
 
                 if (TooClose(new PointD(nx, ny), _dTestActive))
                 {
-                    Interlocked.Increment(ref BreakReasons[1]);
+                    Stopped(LayoutDiagnostics.Stop.Spacing);
                     break;
                 }
 
                 if (SelfIntersects(path, nx, ny))
                 {
-                    Interlocked.Increment(ref BreakReasons[2]);
+                    Stopped(LayoutDiagnostics.Stop.SelfHit);
                     break;
                 }
 
@@ -731,11 +797,17 @@ public static class Tessellation
 
                 if (i == maxSteps - 1)
                 {
-                    Interlocked.Increment(ref BreakReasons[4]);
+                    Stopped(LayoutDiagnostics.Stop.Steps);
                 }
             }
 
             return path;
+        }
+
+        private void Stopped(LayoutDiagnostics.Stop reason)
+        {
+            _lastStop = reason;
+            LayoutDiagnostics.Broke(reason);
         }
 
         private (double X, double Y) Direction(double x, double y, double hx, double hy)
@@ -782,10 +854,11 @@ public static class Tessellation
         private bool Inside(PointD p) =>
             p.X >= 0.0 && p.X <= fieldWidth && p.Y >= 0.0 && p.Y <= fieldHeight;
 
-        private void Add(PointD p)
+        private void Add(PointD p, bool structural)
         {
             var cell = ((int)Math.Floor(p.X / dSep), (int)Math.Floor(p.Y / dSep));
-            (_points.TryGetValue(cell, out List<PointD>? bucket) ? bucket : _points[cell] = []).Add(p);
+            (_points.TryGetValue(cell, out List<(PointD, bool)>? bucket) ? bucket : _points[cell] = [])
+                .Add((p, structural));
         }
 
         private bool TooClose(PointD p, double d)
@@ -798,12 +871,12 @@ public static class Tessellation
             {
                 for (int gy = cy - 1; gy <= cy + 1; gy++)
                 {
-                    if (!_points.TryGetValue((gx, gy), out List<PointD>? bucket))
+                    if (!_points.TryGetValue((gx, gy), out List<(PointD Point, bool Structural)>? bucket))
                     {
                         continue;
                     }
 
-                    foreach (PointD q in bucket)
+                    foreach ((PointD q, bool _) in bucket)
                     {
                         double dx = q.X - p.X;
                         double dy = q.Y - p.Y;
@@ -816,6 +889,46 @@ public static class Tessellation
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Diagnostic only: the nearest laid point to <paramref name="p"/> within the neighbouring
+        /// buckets, and what kind of course it belongs to. Distance is infinite when nothing is laid
+        /// within reach — the caller reports that as "no neighbour".
+        /// </summary>
+        private (double Distance, LayoutDiagnostics.Blocker Kind) Nearest(PointD p)
+        {
+            double bestSq = double.PositiveInfinity;
+            LayoutDiagnostics.Blocker kind = LayoutDiagnostics.Blocker.None;
+            int cx = (int)Math.Floor(p.X / dSep);
+            int cy = (int)Math.Floor(p.Y / dSep);
+
+            for (int gx = cx - 1; gx <= cx + 1; gx++)
+            {
+                for (int gy = cy - 1; gy <= cy + 1; gy++)
+                {
+                    if (!_points.TryGetValue((gx, gy), out List<(PointD Point, bool Structural)>? bucket))
+                    {
+                        continue;
+                    }
+
+                    foreach ((PointD q, bool structural) in bucket)
+                    {
+                        double dx = q.X - p.X;
+                        double dy = q.Y - p.Y;
+                        double sq = (dx * dx) + (dy * dy);
+                        if (sq < bestSq)
+                        {
+                            bestSq = sq;
+                            kind = structural
+                                ? LayoutDiagnostics.Blocker.Structural
+                                : LayoutDiagnostics.Blocker.Fill;
+                        }
+                    }
+                }
+            }
+
+            return (Math.Sqrt(bestSq), kind);
         }
     }
 
@@ -987,6 +1100,37 @@ public static class Tessellation
     }
 
     /// <summary>
+    /// How many courses are laid before the fill: the border rings plus the rows hugging each
+    /// contour. Those are laid first, so their ids are the lowest and anything above this count came
+    /// out of the streamline fill. Exposed because the rule is not a constant — the silhouette takes
+    /// one row on a small panel and two on a large one (<see cref="OutwardOffsets"/>) — and the bench
+    /// re-deriving it as "two rows per contour" overcounted on every panel under 30 cm.
+    /// </summary>
+    public static int StructuralCourseCount(
+        MosaicLayout layout, DirectionField field, IReadOnlyList<PointD[]> contours)
+    {
+        ArgumentNullException.ThrowIfNull(layout);
+        ArgumentNullException.ThrowIfNull(field);
+        ArgumentNullException.ThrowIfNull(contours);
+
+        int rows = contours.Count * 2;
+        if (field.Figure is not null && contours.Count > 0)
+        {
+            rows -= 2 - SilhouetteRowCount(layout.FieldWidthMm, layout.FieldHeightMm);
+        }
+
+        return BorderCourseCount(layout) + rows;
+    }
+
+    /// <summary>
+    /// Rows of opus vermiculatum along the silhouette: two on a panel large enough to carry them,
+    /// one on a small panel, where a two-row halo eats as much of the work as the border does
+    /// (measured: contour courses take a third of a 15 cm panel with two rows).
+    /// </summary>
+    private static int SilhouetteRowCount(double fieldWidth, double fieldHeight) =>
+        Math.Min(fieldWidth, fieldHeight) >= 300.0 ? 2 : 1;
+
+    /// <summary>
     /// The largest ring count in {0, 1, 2} whose border band covers no more than
     /// <paramref name="budget"/> of the field. The caller keeps a floor of one.
     /// </summary>
@@ -1036,11 +1180,10 @@ public static class Tessellation
 
     /// <summary>
     /// The silhouette's row offsets, all on the background side: the figure keeps its own andamento,
-    /// the background gets the halo. Two rows — half a course and one and a half — on a panel large
-    /// enough to carry them; one row on a small panel, where a two-row halo eats as much of the work
-    /// as the border does (measured: contour courses take a third of a 15 cm panel with two rows).
-    /// The sign is whichever way <see cref="OffsetPolyline"/> steps off the figure, from sampling the
-    /// mask a half-course out along the contour.
+    /// the background gets the halo. Rows — half a course out, then one and a half — as
+    /// <see cref="SilhouetteRowCount"/> allows for the panel. The sign is whichever way
+    /// <see cref="OffsetPolyline"/> steps off the figure, from sampling the mask a half-course out
+    /// along the contour.
     /// </summary>
     private static double[] OutwardOffsets(
         PointD[] contour, FigureMask figure, double fieldWidth, double fieldHeight, double dAcross)
@@ -1057,7 +1200,7 @@ public static class Tessellation
         }
 
         double sign = onFigure > probe.Length / 2 ? -1.0 : 1.0;
-        return Math.Min(fieldWidth, fieldHeight) >= 300.0
+        return SilhouetteRowCount(fieldWidth, fieldHeight) == 2
             ? [sign * half, sign * 3.0 * half]
             : [sign * half];
     }
