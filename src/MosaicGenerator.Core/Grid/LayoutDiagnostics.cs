@@ -1,3 +1,5 @@
+using MosaicGenerator.Core.Rendering;
+
 namespace MosaicGenerator.Core.Grid;
 
 /// <summary>
@@ -78,7 +80,8 @@ public static class LayoutDiagnostics
         Stop Forward,
         Stop Backward,
         Blocker StoppedBy,
-        double NearestAtSeedMm);
+        double NearestAtSeedMm,
+        PointD Seed);
 
     /// <summary>One pass of the merge-and-grow correction in step 5.</summary>
     public sealed record Repair(int Pass, int Merged, int Holes, int GrownCourses, int Fillers);

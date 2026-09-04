@@ -592,7 +592,7 @@ public static class Tessellation
                 Note(
                     LayoutDiagnostics.Seeding.Hole, path,
                     accepted: ArcLength(path) >= keepIfLongerThan,
-                    keepIfLongerThan, nearest);
+                    keepIfLongerThan, nearest, seed);
                 return path;
             }
             finally
@@ -666,11 +666,11 @@ public static class Tessellation
                 List<PointD> course = Integrate(seed);
                 if (ArcLength(course) < minLength)
                 {
-                    Note(source, course, accepted: false, minLength, nearest);
+                    Note(source, course, accepted: false, minLength, nearest, seed);
                     continue;
                 }
 
-                Note(source, course, accepted: true, minLength, nearest);
+                Note(source, course, accepted: true, minLength, nearest, seed);
 
                 double length = ArcLength(course);
                 for (double s = 0.0; s <= length; s += integStep)
@@ -704,7 +704,8 @@ public static class Tessellation
             List<PointD> path,
             bool accepted,
             double minLength,
-            double nearestAtSeed)
+            double nearestAtSeed,
+            PointD seed)
         {
             if (!LayoutDiagnostics.Enabled)
             {
@@ -721,7 +722,7 @@ public static class Tessellation
             LayoutDiagnostics.Record(new LayoutDiagnostics.Attempt(
                 source, accepted, ArcLength(path), minLength,
                 _lastForward, _lastBackward, blocker,
-                double.IsPositiveInfinity(nearestAtSeed) ? -1.0 : nearestAtSeed));
+                double.IsPositiveInfinity(nearestAtSeed) ? -1.0 : nearestAtSeed, seed));
         }
 
         private List<PointD> Integrate(PointD seed)
@@ -1251,7 +1252,7 @@ public static class Tessellation
     /// draws its contours at, so the piece-size signal and the contour courses agree on where a form
     /// is. Returns 0 for a photograph with no real edges.
     /// </summary>
-    private static double ContourLevel(DirectionField field) => ContourSet.LevelFor(field.EdgeCells);
+    public static double ContourLevel(DirectionField field) => ContourSet.LevelFor(field.EdgeCells);
 
     /// <summary>
     /// The nearest bite on the real size series {6, 8, 10, 12, 15, 20} mm to <paramref name="target"/>,

@@ -39,12 +39,14 @@ internal static class CourseAutopsy
         Console.WriteLine("  — вскрытие курсов —");
         Seeds(attempts, along);
         Blockers(attempts);
+        Zones(attempts, layout, field, along);
         Bites(along);
         Passes();
 
         Role[] roles = Roles(layout, tesserae, field, contours);
         Vertices(tesserae, roles);
         Gaps(layout, tesserae, roles);
+        FillerZones(layout, tesserae, field, roles);
     }
 
     /// <summary>
@@ -99,6 +101,74 @@ internal static class CourseAutopsy
             Console.WriteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                 $"  {(accepted ? "принятые " : "брошенные")} ({mine.Length,4}): упёрлись в структурный {structural * 100.0 / mine.Length,3:0}%, " +
                 $"в заливку {fill * 100.0 / mine.Length,3:0}%;  до соседа в момент посева p50 {P(nearest, 0.5):0.0} мм"));
+        }
+    }
+
+    /// <summary>
+    /// Whether the fill can get away from a structural barrier (border, contour) once it is seeded
+    /// near one, split by where the seed landed: inside the figure's silhouette, on flat background,
+    /// or on background with its own texture. Asked twice, for the two mechanisms TODO п.1 names:
+    /// offset/sweep seeding (moving fill away from what it was seeded from) and holes grown in step 5
+    /// (closing what the first pass missed). If courses in the silhouette or on flat ground die
+    /// against the structural barrier, or holes there refuse to grow a course, far more than on
+    /// textured ground, that is the mechanism TODO п.1 calls "the fill cannot get away from the
+    /// border/contour".
+    /// </summary>
+    private static void Zones(
+        IReadOnlyList<LayoutDiagnostics.Attempt> attempts, MosaicLayout layout, DirectionField field, double alongMm)
+    {
+        double w = layout.FieldWidthMm;
+        double h = layout.FieldHeightMm;
+        double flatCeiling = Tessellation.ContourLevel(field) * 0.35;
+
+        string Zone(LayoutDiagnostics.Attempt a)
+        {
+            double u = a.Seed.X / w;
+            double v = a.Seed.Y / h;
+            if (field.IsForeground(u, v))
+            {
+                return "внутри силуэта  ";
+            }
+
+            return field.EdgeAt(u, v) < flatCeiling ? "фон плоский    " : "фон с текстурой";
+        }
+
+        ZonesFor(attempts, "офсетный + подметающий",
+            a => a.Source is LayoutDiagnostics.Seeding.Offset or LayoutDiagnostics.Seeding.Sweep, Zone, alongMm);
+        ZonesFor(attempts, "в дыру (шаг 5)",
+            a => a.Source == LayoutDiagnostics.Seeding.Hole, Zone, alongMm);
+    }
+
+    private static void ZonesFor(
+        IReadOnlyList<LayoutDiagnostics.Attempt> attempts,
+        string label,
+        Func<LayoutDiagnostics.Attempt, bool> filter,
+        Func<LayoutDiagnostics.Attempt, string> zone,
+        double alongMm)
+    {
+        var relevant = attempts.Where(filter).ToArray();
+        if (relevant.Length == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+            $"  по зоне посева ({label}):  попыток  принято  длина принятого (кусков)  в структурный  в заливку"));
+        foreach (var group in relevant.GroupBy(zone).OrderByDescending(g => g.Count()))
+        {
+            var mine = group.ToArray();
+            var accepted = mine.Where(a => a.Accepted).ToArray();
+            double[] lens = [.. accepted.Select(a => a.LengthMm / alongMm).Order()];
+            var spacing = mine.Where(a => a.Forward == LayoutDiagnostics.Stop.Spacing
+                || a.Backward == LayoutDiagnostics.Stop.Spacing).ToArray();
+            int structural = spacing.Count(a => a.StoppedBy == LayoutDiagnostics.Blocker.Structural);
+            int fill = spacing.Count(a => a.StoppedBy == LayoutDiagnostics.Blocker.Fill);
+            int spacingTotal = Math.Max(spacing.Length, 1);
+
+            Console.WriteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+                $"  {group.Key} {mine.Length,8}  {accepted.Length * 100.0 / mine.Length,6:0}%  " +
+                $"p10 {P(lens, 0.1),4:0.0}  p50 {P(lens, 0.5),4:0.0}  p90 {P(lens, 0.9),5:0.0}   " +
+                $"{structural * 100.0 / spacingTotal,4:0}%          {fill * 100.0 / spacingTotal,3:0}%"));
         }
     }
 
@@ -244,6 +314,50 @@ internal static class CourseAutopsy
             double got = counts.GetValueOrDefault(role) * 100.0 / wide.Count;
             Console.WriteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                 $"  {Name(role),-22} {got,5:0}% зазоров при {share,5:0}% кусков  ×{got / share,4:0.0}"));
+        }
+    }
+
+    /// <summary>
+    /// Where the filler pieces — single tesserae grown in step 5, not part of any course — actually
+    /// sit: inside the figure's silhouette, on flat background, or on textured background, against
+    /// each zone's share of every piece on the panel. A ratio above one means fillers gather there —
+    /// the geographic half of TODO п.1's claim that crumble concentrates where the picture has no
+    /// structure to seed a course from.
+    /// </summary>
+    private static void FillerZones(
+        MosaicLayout layout, IReadOnlyList<Tessera> tesserae, DirectionField field, Role[] roles)
+    {
+        double w = layout.FieldWidthMm;
+        double h = layout.FieldHeightMm;
+        double flatCeiling = Tessellation.ContourLevel(field) * 0.35;
+
+        string Zone(PointD c)
+        {
+            double u = c.X / w;
+            double v = c.Y / h;
+            if (field.IsForeground(u, v))
+            {
+                return "внутри силуэта  ";
+            }
+
+            return field.EdgeAt(u, v) < flatCeiling ? "фон плоский    " : "фон с текстурой";
+        }
+
+        string[] zones = [.. tesserae.Select(t => Zone(t.Centroid))];
+        var fillerZones = zones.Where((_, i) => roles[i] == Role.Filler).ToArray();
+        if (fillerZones.Length == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine("  филлеры по зоне, доля от всех кусков зоны:");
+        foreach (var group in zones.GroupBy(z => z).OrderByDescending(g => g.Count()))
+        {
+            double share = group.Count() * 100.0 / zones.Length;
+            int fillersHere = fillerZones.Count(z => z == group.Key);
+            double ofZone = fillersHere * 100.0 / group.Count();
+            Console.WriteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+                $"  {group.Key} {ofZone,5:0}% кусков зоны — филлеры  ({share,4:0}% панно)"));
         }
     }
 

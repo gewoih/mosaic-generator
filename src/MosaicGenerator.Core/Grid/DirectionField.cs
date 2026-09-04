@@ -68,6 +68,14 @@ public sealed class DirectionField
         return Math.Sqrt((vx * vx) + (vy * vy));
     }
 
+    /// <summary>
+    /// Whether (<paramref name="u"/>, <paramref name="v"/>) falls inside the figure's silhouette.
+    /// False both when the point is on the background and when the photo has no clean figure at
+    /// all — for the bench, which needs to tell "inside the silhouette" from "flat background"
+    /// without touching <see cref="Figure"/> directly.
+    /// </summary>
+    public bool IsForeground(double u, double v) => _figure?.ForegroundAt(u, v) ?? false;
+
     /// <summary>Edge strength at (<paramref name="u"/>, <paramref name="v"/>), 0..1 — where a contour course could run.</summary>
     public double EdgeAt(double u, double v)
     {
