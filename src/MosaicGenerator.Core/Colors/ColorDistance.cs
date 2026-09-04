@@ -33,8 +33,9 @@ public static class ColorDistance
     public static double CieDe76(CieLab a, CieLab b) => Math.Sqrt(CieDe76Squared(a, b));
 
     /// <summary>
-    /// Which ΔE the palette matcher uses. CIE76 is the historical default and is what every
-    /// number in the repo was tuned against; CIEDE2000 is the 2000 revision that behaves far
+    /// Which ΔE the palette matcher uses. CIE76 — here <see cref="HueWeightedSquared"/>, CIE76
+    /// with the hue term weighted — is the historical default and is what every number in the
+    /// repo was tuned against; CIEDE2000 is the 2000 revision that behaves far
     /// better in the blue region. Kept as a process-wide switch so the diagnostic bench can run
     /// both without threading a parameter through the whole pipeline. Production leaves it at
     /// <see cref="Metric.Cie76"/> — see <c>docs/ciede2000-plan.md</c>.
@@ -53,11 +54,44 @@ public static class ColorDistance
     public static Metric MatchingMetric { get; set; } = Metric.Cie76;
 
     /// <summary>
+    /// How much heavier a change of hue counts than an equal loss of chroma, in squared units.
+    /// One is plain CIE76 — the euclidean distance charges the same for both, and the eye does
+    /// not: a colour that has gone duller reads as the same colour in poorer light, a colour whose
+    /// hue has moved reads as the wrong colour. Measured on the bench: 5–10 % of the chromatic
+    /// pieces on landscape and landscape-2 were landing more than 40° away in hue, which is what
+    /// put acid yellow into a green forest (docs/tsvet-uezzhaet-plan.md).
+    /// </summary>
+    public const double HueWeight = 3.0;
+
+    /// <summary>
+    /// CIE76 with its chromatic half split into the two losses it confuses — how much chroma was
+    /// given up, and how far the hue moved — and the hue term weighted by <see cref="HueWeight"/>.
+    /// At weight one this is exactly <see cref="CieDe76Squared"/>, which is the point: it is not a
+    /// different colour model, only the one degree of freedom euclid nails to unity.
+    ///
+    /// Nothing has to guard the neutrals: ΔH is bounded by the chroma of the two colours, so for a
+    /// near-grey it is small on its own. That is right — grey has no hue to be wrong about.
+    /// </summary>
+    public static double HueWeightedSquared(CieLab a, CieLab b)
+    {
+        double dl = a.L - b.L;
+        double chromaA = Math.Sqrt((a.A * a.A) + (a.B * a.B));
+        double chromaB = Math.Sqrt((b.A * b.A) + (b.B * b.B));
+        double dc = chromaA - chromaB;
+
+        double da = a.A - b.A;
+        double db = a.B - b.B;
+        double dh2 = Math.Max(0.0, (da * da) + (db * db) - (dc * dc));
+
+        return (dl * dl) + (dc * dc) + (HueWeight * dh2);
+    }
+
+    /// <summary>
     /// ΔE for palette matching, under whichever <see cref="MatchingMetric"/> is set. Returns the
     /// distance itself, not its square: CIEDE2000 has no monotonic squared form.
     /// </summary>
     public static double Match(CieLab a, CieLab b) =>
-        MatchingMetric == Metric.Cie76 ? CieDe76(a, b) : CieDe2000(a, b);
+        MatchingMetric == Metric.Cie76 ? Math.Sqrt(HueWeightedSquared(a, b)) : CieDe2000(a, b);
 
     /// <summary>
     /// Squared matching ΔE, for the callers whose cost model is built in squared units
@@ -69,7 +103,7 @@ public static class ColorDistance
     {
         if (MatchingMetric == Metric.Cie76)
         {
-            return CieDe76Squared(a, b);
+            return HueWeightedSquared(a, b);
         }
 
         double d = CieDe2000(a, b);

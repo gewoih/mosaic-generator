@@ -39,23 +39,72 @@ public class ToneMapTests
     }
 
     [Fact]
-    public void APhotographUsingHalfTheRangeIsOpenedToAllOfIt()
+    public void APhotographUsingHalfTheRangeIsOpenedAsFarAsTheRangeAllows()
     {
         // The gull's disease: the camera works in a range the glass does not have, so the picture
         // arrives occupying part of what the material could say. Everything downstream is then
-        // choosing between fewer articles than exist.
+        // choosing between fewer articles than exist. Opened around the mid tone, so the end nearer
+        // the mid tone is what runs out first — here the light end, and the dark end stops short of
+        // the darkest article rather than dragging the whole picture down with it.
         var random = new Random(20260902);
         CieLab[] cells = [.. Enumerable.Range(0, 800)
             .Select(_ => new CieLab(55.0 + (random.NextDouble() * 25.0), -2, -14))];
 
         CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
 
-        double before = mapped.Length == 0 ? 0 : cells.Max(c => c.L) - cells.Min(c => c.L);
+        double before = cells.Max(c => c.L) - cells.Min(c => c.L);
         double after = mapped.Max(c => c.L) - mapped.Min(c => c.L);
 
         Assert.True(after > before * 2.0, $"span {before:0.0} -> {after:0.0} L*");
-        Assert.InRange(mapped.Min(c => c.L), 28.0, 36.0);
         Assert.InRange(mapped.Max(c => c.L), 89.0, 97.0);
+        Assert.InRange(mapped.Min(c => c.L), 30.0, 45.0);
+    }
+
+    [Fact]
+    public void TheMidToneOfThePhotographStaysWhereItWas()
+    {
+        // What the anchor is for: pinned only by its two ends, the mapping moved the
+        // middle of the panel by up to 15 L*, and in whichever direction the exposure happened to
+        // sit. A photograph weighted towards its shadows must not come back as a light panel.
+        var random = new Random(20260904);
+        CieLab[] cells = [.. Enumerable.Range(0, 900)
+            .Select(i => new CieLab(
+                i % 5 == 0 ? 70.0 + (random.NextDouble() * 20.0) : 40.0 + (random.NextDouble() * 12.0),
+                -2, -14))];
+
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+
+        Assert.Equal(Median([.. cells.Select(c => c.L)]), Median([.. mapped.Select(c => c.L)]), 3);
+    }
+
+    [Fact]
+    public void NeitherEndIsPushedPastWhatTheMaterialHas()
+    {
+        // Opening around the mid tone must not throw the ends outside the range: cells past the
+        // darkest or lightest article all collapse onto that one article, which is gradation lost.
+        var random = new Random(20260904);
+        CieLab[] cells = [.. Enumerable.Range(0, 900)
+            .Select(_ => new CieLab(58.0 + (random.NextDouble() * 9.0), -2, -14))];
+
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+
+        Assert.InRange(mapped.Min(c => c.L), 29.0, 100.0);
+        Assert.InRange(mapped.Max(c => c.L), 0.0, 96.0);
+    }
+
+    [Fact]
+    public void AMidToneTheMaterialCannotReachIsBroughtInside()
+    {
+        // A photograph darker than the darkest smalt has nowhere to stay: there is no glass there.
+        // It comes up — but only just inside the range, not to the middle of it.
+        var random = new Random(20260904);
+        CieLab[] cells = [.. Enumerable.Range(0, 600)
+            .Select(_ => new CieLab(2.0 + (random.NextDouble() * 14.0), -2, -14))];
+
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+
+        // Range() runs 30..95, so the anchor lands 0,15 of 65 L* above the dark end.
+        Assert.InRange(Median([.. mapped.Select(c => c.L)]), 36.0, 44.0);
     }
 
     [Fact]
@@ -147,5 +196,12 @@ public class ToneMapTests
     }
 
     private static double Chroma(CieLab lab) => Math.Sqrt((lab.A * lab.A) + (lab.B * lab.B));
+
+    /// <summary>The same median ToneMap takes: the sorted value at the halfway index.</summary>
+    private static double Median(double[] values)
+    {
+        Array.Sort(values);
+        return values[(int)Math.Round(0.5 * (values.Length - 1))];
+    }
 
 }

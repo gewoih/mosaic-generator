@@ -6,12 +6,12 @@ using MosaicGenerator.Core.Rendering;
 namespace MosaicGenerator.Diag;
 
 /// <summary>
-/// Why the courses come out short (пункт 1 TODO), and whether пункты 2 and 6 are the same defect
+/// Why the courses come out short, and whether the piece shape and the wide gaps are the same defect
 /// seen from two other sides. The finished tesserae cannot answer the first question — a course
 /// that died after two steps and one that crossed the panel are both just polygons by then — so
 /// this reads <see cref="LayoutDiagnostics"/>, which the placer fills while it works.
 ///
-/// The link to пункты 2 and 6 is measured here rather than argued: every course has two ends, an
+/// The link between the three is measured here rather than argued: every course has two ends, an
 /// end piece is cut by neighbours on three or four sides instead of two, and the space a course
 /// stopped short of is where the adhesive shows. If that is right, end pieces carry the extra
 /// vertices and the wide gaps sit against them.
@@ -176,7 +176,7 @@ internal static class CourseAutopsy
     }
 
     /// <summary>
-    /// Пункт 2 against пункт 1: vertex counts by role. A four-sided piece is what nippers make; the
+    /// Piece shape against course length: vertex counts by role. A four-sided piece is what nippers make; the
     /// question is whether the five- and six-sided ones are spread evenly or sit at the ends of
     /// courses, where a piece is cut by neighbours on three or four sides instead of two.
     /// </summary>
@@ -199,7 +199,7 @@ internal static class CourseAutopsy
     }
 
     /// <summary>
-    /// Пункт 6 against пункт 1: where the wide gaps are. For every bare point sitting in a gap wider
+    /// Wide gaps against course length: where the gaps are. For every bare point sitting in a gap wider
     /// than 3 mm, the role of the nearest piece — against the share that role holds of the panel. A
     /// ratio above one means gaps gather there; the course ends and the fillers are the suspects.
     /// </summary>

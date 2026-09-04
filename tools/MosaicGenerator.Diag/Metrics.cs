@@ -28,7 +28,7 @@ internal static class Metrics
         /// <summary>Share of pieces with more than six vertices — shards no cut produces.</summary>
         public required double ManySidedShare { get; init; }
 
-        /// <summary>Vertex count of the piece polygon, as shares of all pieces (пункт 3 TODO).</summary>
+        /// <summary>Vertex count of the piece polygon, as shares of all pieces (бэклог: «Форма куска»).</summary>
         public required double QuadShare { get; init; }
 
         public required double PentaShare { get; init; }
@@ -40,7 +40,7 @@ internal static class Metrics
         /// <summary>
         /// Share of pieces whose polygon is not convex, and share whose edges cross themselves.
         /// Both have measured 0 % on all eight photos; carried as columns so a regression shows up
-        /// in the CSV rather than only in a one-off script (пункт 2 TODO).
+        /// in the CSV rather than only in a one-off script (бэклог: «Форма куска»).
         /// </summary>
         public required double ConcaveShare { get; init; }
 
@@ -66,7 +66,7 @@ internal static class Metrics
         /// <summary>
         /// The joint seen as gaps, in millimetres: area-weighted median and 90th percentile of the
         /// gap width under each bare spot, and the widest gap anywhere. Nominal joint is ~1 mm; the
-        /// tail is what the eye reads as arrows and ticks on the cartoon (пункт 7 TODO).
+        /// tail is what the eye reads as arrows and ticks on the cartoon (бэклог: «Дыры в раскладке»).
         /// </summary>
         public required double JointP50Mm { get; init; }
 
@@ -408,24 +408,25 @@ internal static class Metrics
         /// <summary>
         /// Share of pieces whose article matches none of their neighbours, and — of those — the
         /// share that are also loud: more than 15 ΔE from the mean of the neighbours they clash
-        /// with. A lone white piece in a grey sky reads as a setting mistake (пункт 6 TODO).
+        /// with. A lone white piece in a grey sky reads as a setting mistake (бэклог: «Крап»).
         /// </summary>
         public required double SingletonShare { get; init; }
 
         public required double LoudSingletonShare { get; init; }
 
-        /// <summary>Share of pieces sitting in a connected same-article blob of only one or two pieces (пункт 6 TODO).</summary>
+        /// <summary>Share of pieces sitting in a connected same-article blob of only one or two pieces (бэклог: «Крап»).</summary>
         public required double SmallIslandShare { get; init; }
 
         /// <summary>
         /// Median of (L* of the placed article − L* of the photograph cell). The panel drifting
-        /// bodily lighter or darker than the photo, the same way for every piece (пункт 4 TODO).
+        /// bodily lighter or darker than the photo, the same way for every piece
+        /// (docs/tsvet-uezzhaet-plan.md).
         /// </summary>
         public required double DeltaLMedian { get; init; }
 
         /// <summary>
         /// Share of pieces where photo and article are both chromatic (C* &gt; 8) yet their Lab hue
-        /// angles differ by more than 40° — a hue swap, not a near miss (пункт 5 TODO).
+        /// angles differ by more than 40° — a hue swap, not a near miss (docs/tsvet-uezzhaet-plan.md).
         /// </summary>
         public required double HueDriftShare { get; init; }
     }

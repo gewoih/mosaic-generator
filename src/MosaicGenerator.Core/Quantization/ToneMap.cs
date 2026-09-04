@@ -12,11 +12,14 @@ namespace MosaicGenerator.Core.Quantization;
 /// the whole sky sat inside less than one step of the range. Nothing downstream can recover from
 /// that: the quantiser is choosing correctly, there is simply nothing left to choose between.
 ///
-/// Two moves, and neither is a setting. Lightness is laid across the range the material has, so a
-/// photograph that occupies half of it is opened to all of it. Chroma is folded back inside what the
-/// range can reach, hue kept, so a colour the material does not have lands next to its neighbours
-/// instead of snapping to whatever happens to be nearest — which is what put hard violet chips in
-/// the dolphin's sky.
+/// Two moves, and neither is a setting. Lightness is opened around the mid tone of the photograph:
+/// the middle stays where the camera put it and the ends spread as far as the material reaches, so a
+/// picture occupying half the range is opened without the panel as a whole coming out lighter or
+/// darker than the photograph. Pinned by its two ends instead, as it was until docs/tsvet-uezzhaet-plan.md, the mapping
+/// moved the middle by up to 15 L* in whichever direction the exposure happened to sit. Chroma is
+/// folded back inside what the range can reach, hue kept, so a colour the material does not have
+/// lands next to its neighbours instead of snapping to whatever happens to be nearest — which is
+/// what put hard violet chips in the dolphin's sky.
 ///
 /// It deliberately does no more than that. Equalising the histogram as well — giving a crowded band
 /// as much of the range as it has cells — was tried and measured: it bought no gradation the plain
@@ -34,6 +37,13 @@ public static class ToneMap
     /// colour is left exactly as it was: only what the material cannot reach gets moved.
     /// </summary>
     private const double ChromaKnee = 0.8;
+
+    /// <summary>
+    /// How far inside the material's own range the mid tone of the photograph is kept, as a fraction
+    /// of that range. It only ever bites on a picture whose middle lies outside what the glass can
+    /// say at all; short of that the mid tone is not moved by so much as a unit.
+    /// </summary>
+    private const double AnchorMargin = 0.15;
 
     /// <summary>
     /// Redistributes the sampled cells into the palette's own range.
@@ -55,8 +65,8 @@ public static class ToneMap
             return cells.ToArray();
         }
 
-        (double paletteLow, double paletteHigh) = LightnessRange(palette);
-        (double cellLow, double cellHigh) = LightnessRange(cells);
+        (double paletteLow, double _, double paletteHigh) = LightnessRange(palette);
+        (double cellLow, double cellMedian, double cellHigh) = LightnessRange(cells);
         double[] ceilings = ChromaCeilings(palette);
 
         double step = (paletteHigh - paletteLow) / shadeCount;
@@ -69,13 +79,15 @@ public static class ToneMap
         // mapping fades out and the photograph passes through untouched.
         double reach = Math.Clamp((cellSpan / Math.Max(1e-9, step)) - 1.0, 0.0, 1.0);
 
+        double anchor = Anchor(cellMedian, paletteLow, paletteHigh, paletteSpan);
+        double scale = Scale(cellLow, cellMedian, cellHigh, anchor, paletteLow, paletteHigh, cellSpan);
+
         var mapped = new CieLab[cells.Length];
         for (int i = 0; i < cells.Length; i++)
         {
             CieLab cell = cells[i];
 
-            double share = Math.Clamp((cell.L - cellLow) / cellSpan, 0.0, 1.0);
-            double target = paletteLow + (share * paletteSpan);
+            double target = anchor + (scale * (cell.L - cellMedian));
             double l = cell.L + (reach * (target - cell.L));
 
             (double a, double b) = FoldChroma(cell.A, cell.B, ceilings);
@@ -86,10 +98,52 @@ public static class ToneMap
     }
 
     /// <summary>
-    /// Second and ninety-eighth percentiles rather than the extremes: one stray highlight should not
-    /// decide the range the whole picture is laid into.
+    /// Where the mid tone of the photograph is put. It stays where it was: a mosaicist matches the
+    /// middle of the picture by eye and opens the ends around it, and a mapping pinned only by its
+    /// two ends cannot help moving the middle — that is exactly what it did, by −15 L* on gull-2 and
+    /// +16 on landscape-2, in whichever direction the exposure happened to sit. Only a mid tone the
+    /// material cannot reach gets moved, and then no further than <see cref="AnchorMargin"/> inside
+    /// the range: a photograph darker than the darkest smalt has to come up, there is no glass there.
     /// </summary>
-    private static (double Low, double High) LightnessRange(ReadOnlySpan<CieLab> colors)
+    private static double Anchor(double median, double paletteLow, double paletteHigh, double paletteSpan) =>
+        Math.Clamp(
+            median,
+            paletteLow + (AnchorMargin * paletteSpan),
+            paletteHigh - (AnchorMargin * paletteSpan));
+
+    /// <summary>
+    /// How far the picture is opened around its mid tone: as far as the range allows without either
+    /// end running past what the material has. Both ends are held by one and the same factor, which
+    /// is the whole point — bending the two halves separately would let the mid tone stay put and
+    /// still tear a flat sky apart, because the fold would land inside the very band that holds most
+    /// of the cells. The price is that a photograph whose mid tone sits off-centre no longer reaches
+    /// both ends of the range at once. That is honest: the material is what it is, and keeping the
+    /// tone of the picture is worth more than touching the lightest article.
+    /// </summary>
+    private static double Scale(
+        double cellLow, double cellMedian, double cellHigh, double anchor,
+        double paletteLow, double paletteHigh, double cellSpan)
+    {
+        double scale = (paletteHigh - paletteLow) / cellSpan;
+
+        if (cellMedian - cellLow > 1e-9)
+        {
+            scale = Math.Min(scale, (anchor - paletteLow) / (cellMedian - cellLow));
+        }
+
+        if (cellHigh - cellMedian > 1e-9)
+        {
+            scale = Math.Min(scale, (paletteHigh - anchor) / (cellHigh - cellMedian));
+        }
+
+        return scale;
+    }
+
+    /// <summary>
+    /// Second and ninety-eighth percentiles rather than the extremes: one stray highlight should not
+    /// decide the range the whole picture is laid into. The median comes off the same sort.
+    /// </summary>
+    private static (double Low, double Median, double High) LightnessRange(ReadOnlySpan<CieLab> colors)
     {
         double[] sorted = new double[colors.Length];
         for (int i = 0; i < colors.Length; i++)
@@ -98,7 +152,7 @@ public static class ToneMap
         }
 
         Array.Sort(sorted);
-        return (Percentile(sorted, 0.02), Percentile(sorted, 0.98));
+        return (Percentile(sorted, 0.02), Percentile(sorted, 0.5), Percentile(sorted, 0.98));
     }
 
     /// <summary>How much chroma the range reaches in each hue sector, as its ninety-fifth percentile.</summary>

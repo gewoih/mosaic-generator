@@ -53,14 +53,63 @@ public class ColorDistanceTests
     }
 
     [Fact]
-    public void MatchUnderCie76IsPlainCie76AndMatchSquaredItsSquare()
+    public void MatchUnderCie76IsTheHueWeightedFormAndMatchSquaredItsSquare()
     {
         var a = new CieLab(50.0, 10.0, -20.0);
         var b = new CieLab(55.0, -4.0, 12.0);
 
         Assert.Equal(ColorDistance.Metric.Cie76, ColorDistance.MatchingMetric);
-        Assert.Equal(ColorDistance.CieDe76(a, b), ColorDistance.Match(a, b), 1e-12);
-        Assert.Equal(ColorDistance.CieDe76Squared(a, b), ColorDistance.MatchSquared(a, b), 1e-12);
+        Assert.Equal(
+            Math.Sqrt(ColorDistance.HueWeightedSquared(a, b)), ColorDistance.Match(a, b), 1e-12);
+        Assert.Equal(ColorDistance.HueWeightedSquared(a, b), ColorDistance.MatchSquared(a, b), 1e-12);
+    }
+
+    [Fact]
+    public void ColoursOfOneHueAreMeasuredExactlyAsCie76Does()
+    {
+        // Same hue angle, different chroma and lightness: there is no hue term to weight, so the
+        // weighting may not touch the figure at all.
+        var a = new CieLab(50.0, 12.0, 16.0);
+        var b = new CieLab(58.0, 24.0, 32.0);
+
+        Assert.Equal(ColorDistance.CieDe76Squared(a, b), ColorDistance.HueWeightedSquared(a, b), 1e-9);
+    }
+
+    [Fact]
+    public void AChangeOfHueCostsMoreThanAnEqualLossOfChroma()
+    {
+        // Two candidates the same euclidean distance from the target: one duller, one turned. The
+        // turned one has to cost more — that is the whole of the hue penalty.
+        var target = new CieLab(50.0, 30.0, 0.0);
+        var duller = new CieLab(50.0, 10.0, 0.0);
+        // Turned far enough that the chord it travels is the same 20 units the duller one lost.
+        double turn = 2.0 * Math.Asin(10.0 / 30.0);
+        var turned = new CieLab(50.0, 30.0 * Math.Cos(turn), 30.0 * Math.Sin(turn));
+
+        Assert.Equal(
+            ColorDistance.CieDe76Squared(target, duller),
+            ColorDistance.CieDe76Squared(target, turned),
+            0.5);
+        Assert.True(
+            ColorDistance.HueWeightedSquared(target, turned)
+                > ColorDistance.HueWeightedSquared(target, duller) * 2.0,
+            $"turned {ColorDistance.HueWeightedSquared(target, turned):0.0} against "
+                + $"duller {ColorDistance.HueWeightedSquared(target, duller):0.0}");
+    }
+
+    [Fact]
+    public void ANeutralIsNotChargedForHavingTheWrongHue()
+    {
+        // Grey has no hue to be wrong about: two near-neutrals on opposite sides of the axis must
+        // stay as close as CIE76 says they are, whatever the hue angle between them.
+        var a = new CieLab(60.0, 1.0, 1.0);
+        var b = new CieLab(60.0, -1.0, -1.0);
+
+        Assert.True(
+            ColorDistance.HueWeightedSquared(a, b) < ColorDistance.CieDe76Squared(a, b) * 3.5,
+            $"{ColorDistance.HueWeightedSquared(a, b):0.00} against CIE76 "
+                + $"{ColorDistance.CieDe76Squared(a, b):0.00}");
+        Assert.True(Math.Sqrt(ColorDistance.HueWeightedSquared(a, b)) < 5.0);
     }
 
     [Fact]

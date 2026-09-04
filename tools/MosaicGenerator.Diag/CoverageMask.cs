@@ -126,7 +126,7 @@ internal sealed class CoverageMask
     /// <summary>
     /// Every raster point sitting in a gap wider than <paramref name="wideMm"/> — the same fine
     /// raster and the same doubled-clearance measure <see cref="JointWidths"/> reports, but keeping
-    /// where each one is rather than only how wide. What пункт 6 calls a hole, located.
+    /// where each one is rather than only how wide. What the backlog calls a hole, located.
     /// </summary>
     public static IReadOnlyList<PointD> WideGapPoints(
         MosaicLayout layout, IReadOnlyList<Tessera> tesserae, double wideMm)
