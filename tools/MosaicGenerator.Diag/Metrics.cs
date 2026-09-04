@@ -28,6 +28,24 @@ internal static class Metrics
         /// <summary>Share of pieces with more than six vertices — shards no cut produces.</summary>
         public required double ManySidedShare { get; init; }
 
+        /// <summary>Vertex count of the piece polygon, as shares of all pieces (пункт 3 TODO).</summary>
+        public required double QuadShare { get; init; }
+
+        public required double PentaShare { get; init; }
+
+        public required double HexaShare { get; init; }
+
+        public required double HeptaPlusShare { get; init; }
+
+        /// <summary>
+        /// Share of pieces whose polygon is not convex, and share whose edges cross themselves.
+        /// Both have measured 0 % on all eight photos; carried as columns so a regression shows up
+        /// in the CSV rather than only in a one-off script (пункт 2 TODO).
+        /// </summary>
+        public required double ConcaveShare { get; init; }
+
+        public required double SelfIntersectingShare { get; init; }
+
         /// <summary>Share of joints along a course that turn by more than 25° — the course reads as broken.</summary>
         public required double KinkShare { get; init; }
 
@@ -44,6 +62,23 @@ internal static class Metrics
         public required double StubCourseShare { get; init; }
 
         public required double MedianCourseLength { get; init; }
+
+        /// <summary>
+        /// The joint seen as gaps, in millimetres: area-weighted median and 90th percentile of the
+        /// gap width under each bare spot, and the widest gap anywhere. Nominal joint is ~1 mm; the
+        /// tail is what the eye reads as arrows and ticks on the cartoon (пункт 7 TODO).
+        /// </summary>
+        public required double JointP50Mm { get; init; }
+
+        public required double JointP90Mm { get; init; }
+
+        public required double JointMaxMm { get; init; }
+
+        /// <summary>Share of the field under a gap wider than 3 mm.</summary>
+        public required double WideJointArea { get; init; }
+
+        /// <summary>Share of the field taken by the joint as a whole — nominal is ~20.5 % for 10×7 mm.</summary>
+        public required double JointArea { get; init; }
 
         /// <summary>Narrowest side of the piece in millimetres, 5th percentile — what the nippers must hit.</summary>
         public required double MinSideP5 { get; init; }
@@ -159,6 +194,12 @@ internal static class Metrics
 
         int[] lengths = [.. byCourse.Values.Where(c => c[0].CourseId >= 0).Select(c => c.Length).Order()];
 
+        int[] verts = [.. tesserae.Select(t => t.Polygon.Length)];
+        int concave = tesserae.Count(t => !IsConvex(t.Polygon));
+        int selfHit = tesserae.Count(t => SelfIntersects(t.Polygon));
+        (double jp50, double jp90, double jmax, double jwide, double jarea) =
+            CoverageMask.JointWidths(layout, tesserae, 3.0);
+
         return new Shape
         {
             AreaMin = areas[0],
@@ -169,6 +210,17 @@ internal static class Metrics
             TinyShare = (double)areas.Count(a => a < 0.4) / areas.Length,
             SliverShare = (double)slivers / tesserae.Count,
             ManySidedShare = (double)manySided / tesserae.Count,
+            QuadShare = (double)verts.Count(v => v == 4) / verts.Length,
+            PentaShare = (double)verts.Count(v => v == 5) / verts.Length,
+            HexaShare = (double)verts.Count(v => v == 6) / verts.Length,
+            HeptaPlusShare = (double)verts.Count(v => v >= 7) / verts.Length,
+            ConcaveShare = (double)concave / tesserae.Count,
+            SelfIntersectingShare = (double)selfHit / tesserae.Count,
+            JointP50Mm = jp50,
+            JointP90Mm = jp90,
+            JointMaxMm = jmax,
+            WideJointArea = jwide,
+            JointArea = jarea,
             KinkShare = joints > 0 ? (double)kinks / joints : 0.0,
             CourseCount = lengths.Length,
             FillerShare = (double)tesserae.Count(t => t.CourseId < 0) / tesserae.Count,
@@ -250,6 +302,74 @@ internal static class Metrics
         return len < 1e-9 ? new PointD(0.0, 0.0) : new PointD(v.X / len, v.Y / len);
     }
 
+    /// <summary>A simple polygon is convex if every turn goes the same way around it.</summary>
+    private static bool IsConvex(PointD[] p)
+    {
+        if (p.Length < 4)
+        {
+            return true;
+        }
+
+        int sign = 0;
+        for (int i = 0; i < p.Length; i++)
+        {
+            PointD a = Sub(p[(i + 1) % p.Length], p[i]);
+            PointD b = Sub(p[(i + 2) % p.Length], p[(i + 1) % p.Length]);
+            double cross = (a.X * b.Y) - (a.Y * b.X);
+            if (Math.Abs(cross) < 1e-9)
+            {
+                continue;
+            }
+
+            int s = cross > 0 ? 1 : -1;
+            if (sign == 0)
+            {
+                sign = s;
+            }
+            else if (s != sign)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether any two non-adjacent edges of the closed polygon cross.</summary>
+    private static bool SelfIntersects(PointD[] p)
+    {
+        int n = p.Length;
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i + 2; j < n; j++)
+            {
+                if (i == 0 && j == n - 1)
+                {
+                    continue;   // adjacent across the closing edge
+                }
+
+                if (SegmentsCross(p[i], p[(i + 1) % n], p[j], p[(j + 1) % n]))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SegmentsCross(PointD a, PointD b, PointD c, PointD d)
+    {
+        double d1 = Cross(Sub(d, c), Sub(a, c));
+        double d2 = Cross(Sub(d, c), Sub(b, c));
+        double d3 = Cross(Sub(b, a), Sub(c, a));
+        double d4 = Cross(Sub(b, a), Sub(d, a));
+        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
+            && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+    }
+
+    private static double Cross(PointD a, PointD b) => (a.X * b.Y) - (a.Y * b.X);
+
     private static double Percentile(double[] sorted, double fraction) =>
         sorted[Math.Clamp((int)(fraction * (sorted.Length - 1)), 0, sorted.Length - 1)];
 
@@ -284,6 +404,30 @@ internal static class Metrics
         /// on its own is trivial and ruins the other.
         /// </summary>
         public required double MergedShare { get; init; }
+
+        /// <summary>
+        /// Share of pieces whose article matches none of their neighbours, and — of those — the
+        /// share that are also loud: more than 15 ΔE from the mean of the neighbours they clash
+        /// with. A lone white piece in a grey sky reads as a setting mistake (пункт 6 TODO).
+        /// </summary>
+        public required double SingletonShare { get; init; }
+
+        public required double LoudSingletonShare { get; init; }
+
+        /// <summary>Share of pieces sitting in a connected same-article blob of only one or two pieces (пункт 6 TODO).</summary>
+        public required double SmallIslandShare { get; init; }
+
+        /// <summary>
+        /// Median of (L* of the placed article − L* of the photograph cell). The panel drifting
+        /// bodily lighter or darker than the photo, the same way for every piece (пункт 4 TODO).
+        /// </summary>
+        public required double DeltaLMedian { get; init; }
+
+        /// <summary>
+        /// Share of pieces where photo and article are both chromatic (C* &gt; 8) yet their Lab hue
+        /// angles differ by more than 40° — a hue swap, not a near miss (пункт 5 TODO).
+        /// </summary>
+        public required double HueDriftShare { get; init; }
     }
 
     public static Colour Colours(
@@ -303,7 +447,26 @@ internal static class Metrics
             counts[indices[i]] = counts.GetValueOrDefault(indices[i]) + 1;
         }
 
+        var cellLabs = new CieLab[cells.Count];
+        var dL = new double[cells.Count];
+        int hueDrift = 0;
+        for (int i = 0; i < cells.Count; i++)
+        {
+            cellLabs[i] = cells[i].ToLab();
+            CieLab art = observed[indices[i]];
+            dL[i] = art.L - cellLabs[i].L;
+            if (Chroma(cellLabs[i]) > 8.0 && Chroma(art) > 8.0
+                && HueGap(cellLabs[i], art) > 40.0)
+            {
+                hueDrift++;
+            }
+        }
+
+        (double Singleton, double Loud, double Island) coherence =
+            NeighbourArticles(tesserae, layout, indices, observed);
+
         Array.Sort(deltas);
+        double[] sortedDL = [.. dL.Order()];
 
         double[] usedL = [.. counts.Keys.Select(k => observed[k].L).OrderDescending()];
         (double Banding, double Merged) pairs = NeighbourLosses(
@@ -320,6 +483,11 @@ internal static class Metrics
             LightestGap = usedL.Length > 1 ? usedL[0] - usedL[1] : 0.0,
             BandingShare = pairs.Banding,
             MergedShare = pairs.Merged,
+            SingletonShare = coherence.Singleton,
+            LoudSingletonShare = coherence.Loud,
+            SmallIslandShare = coherence.Island,
+            DeltaLMedian = sortedDL.Length == 0 ? 0.0 : Percentile(sortedDL, 0.5),
+            HueDriftShare = (double)hueDrift / cells.Count,
         };
     }
 
@@ -334,6 +502,115 @@ internal static class Metrics
         double low = sorted[Math.Clamp((int)Math.Round(0.02 * (sorted.Length - 1)), 0, sorted.Length - 1)];
         double high = sorted[Math.Clamp((int)Math.Round(0.98 * (sorted.Length - 1)), 0, sorted.Length - 1)];
         return (high - low) / Math.Max(1, shadeCount);
+    }
+
+    private static double Chroma(CieLab c) => Math.Sqrt((c.A * c.A) + (c.B * c.B));
+
+    /// <summary>Angle between two Lab hues, in degrees, 0 to 180.</summary>
+    private static double HueGap(CieLab a, CieLab b)
+    {
+        double d = Math.Abs(Math.Atan2(a.B, a.A) - Math.Atan2(b.B, b.A)) * 180.0 / Math.PI;
+        return d > 180.0 ? 360.0 - d : d;
+    }
+
+    /// <summary>
+    /// Singles and small islands of one article, over the same neighbourhood the quantiser uses.
+    /// A single is a piece no neighbour shares an article with; a loud single is also more than
+    /// 15 ΔE from the mean of those clashing neighbours. An island is a connected run of one
+    /// article; the share returned is of pieces in islands of one or two.
+    /// </summary>
+    private static (double Singleton, double Loud, double Island) NeighbourArticles(
+        IReadOnlyList<Tessera> tesserae,
+        MosaicLayout layout,
+        IReadOnlyList<int> indices,
+        IReadOnlyList<CieLab> observed)
+    {
+        int n = tesserae.Count;
+        if (n == 0)
+        {
+            return (0.0, 0.0, 0.0);
+        }
+
+        CellNeighbourhood hood = CellNeighbourhood.Build(tesserae, layout);
+
+        int singles = 0;
+        int loud = 0;
+        var parent = new int[n];
+        var size = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            parent[i] = i;
+            size[i] = 1;
+        }
+
+        int Find(int x)
+        {
+            while (parent[x] != x)
+            {
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+
+            return x;
+        }
+
+        void Union(int a, int b)
+        {
+            int ra = Find(a), rb = Find(b);
+            if (ra != rb)
+            {
+                parent[ra] = rb;
+                size[rb] += size[ra];
+            }
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            ReadOnlySpan<int> nb = hood.Of(i);
+            bool matched = false;
+            double sumL = 0.0, sumA = 0.0, sumB = 0.0;
+            int clashes = 0;
+            foreach (int j in nb)
+            {
+                if (indices[j] == indices[i])
+                {
+                    matched = true;
+                    Union(i, j);
+                }
+                else
+                {
+                    CieLab o = observed[indices[j]];
+                    sumL += o.L;
+                    sumA += o.A;
+                    sumB += o.B;
+                    clashes++;
+                }
+            }
+
+            if (!matched && nb.Length > 0)
+            {
+                singles++;
+                if (clashes > 0)
+                {
+                    var mean = new CieLab(sumL / clashes, sumA / clashes, sumB / clashes);
+                    if (ColorDistance.CieDe76(observed[indices[i]], mean) > 15.0)
+                    {
+                        loud++;
+                    }
+                }
+            }
+        }
+
+        int inSmallIsland = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (size[Find(i)] <= 2)
+            {
+                inSmallIsland++;
+            }
+        }
+
+        return ((double)singles / n, (double)loud / n, (double)inSmallIsland / n);
     }
 
     /// <summary>

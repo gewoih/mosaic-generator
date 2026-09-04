@@ -26,9 +26,11 @@ internal sealed class CoverageMask
         _cell = cell;
     }
 
-    public static CoverageMask Rasterise(MosaicLayout layout, IReadOnlyList<Tessera> tesserae)
+    public static CoverageMask Rasterise(MosaicLayout layout, IReadOnlyList<Tessera> tesserae) =>
+        Rasterise(layout, tesserae, layout.ModuleWidthMm / 6.0);
+
+    public static CoverageMask Rasterise(MosaicLayout layout, IReadOnlyList<Tessera> tesserae, double cell)
     {
-        double cell = layout.ModuleWidthMm / 6.0;
         int w = (int)Math.Ceiling(layout.FieldWidthMm / cell);
         int h = (int)Math.Ceiling(layout.FieldHeightMm / cell);
         var covered = new bool[w * h];
@@ -93,6 +95,32 @@ internal sealed class CoverageMask
     {
         double[] d = Clearance();
         return (double)d.Count(c => c * _cell > radiusMm) / d.Length;
+    }
+
+    /// <summary>
+    /// The joint seen as gaps rather than as a mean: for every uncovered point, twice its distance
+    /// to the nearest tessera — the width of the gap it sits in. Area-weighted percentiles, one
+    /// sample per raster cell. This runs its own fine raster (module / 40 ≈ 0.25 mm) rather than
+    /// the module / 6 grid the coverage numbers use — a 1 mm joint is invisible at module / 6.
+    /// <paramref name="wideMm"/> is the width past which a gap reads as a hole on the cartoon; its
+    /// share of the whole field comes back as <c>WideArea</c>.
+    /// </summary>
+    public static (double P50Mm, double P90Mm, double MaxMm, double WideArea, double JointArea) JointWidths(
+        MosaicLayout layout, IReadOnlyList<Tessera> tesserae, double wideMm)
+    {
+        CoverageMask fine = Rasterise(layout, tesserae, layout.ModuleWidthMm / 40.0);
+        double[] d = fine.Clearance();
+        double[] gaps = [.. d.Where(c => c > 0.0).Select(c => 2.0 * c * fine._cell).Order()];
+        if (gaps.Length == 0)
+        {
+            return (0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+
+        double P(double q) => gaps[Math.Clamp((int)(q * (gaps.Length - 1)), 0, gaps.Length - 1)];
+        return (
+            P(0.50), P(0.90), gaps[^1],
+            (double)gaps.Count(g => g > wideMm) / d.Length,
+            (double)gaps.Length / d.Length);
     }
 
     private static bool Contains(IReadOnlyList<PointD> polygon, double x, double y)

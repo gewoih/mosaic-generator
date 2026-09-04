@@ -118,9 +118,12 @@ internal static class Program
             "run", "metric", "panel", "along", "across", "grout", "acrossCount", "nominal",
             "tesserae", "ratio", "cut", "overlap", "covered", "bareR", "bare03",
             "areaMin", "areaP5", "areaMed", "areaP95", "areaMax", "tiny", "sliver", "manySided",
+            "v4", "v5", "v6", "v7plus", "concave", "selfHit",
+            "jointP50", "jointP90", "jointMax", "wideJoint", "jointArea",
             "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "uncuttable", "awkward", "structureOff", "edgesCrossed",
             "dE_mean", "dE_p95", "dE_max", "colorsBefore", "colorsUsed", "rare", "dominant",
-            "lightestGap", "banding", "merged", "reassigned", "ms"));
+            "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "dL_med", "hueDrift",
+            "reassigned", "ms"));
 
         foreach (Run run in runs)
         {
@@ -298,16 +301,6 @@ internal static class Program
                     $"  кусков в бордюре {inBorder * 100.0 / tesserae.Count:0.0}%, " +
                     $"в контурных курсах {(inStructural - inBorder) * 100.0 / tesserae.Count:0.0}%, " +
                     $"в заливке {(tesserae.Count - inStructural) * 100.0 / tesserae.Count:0.0}%");
-
-                var sides = new Dictionary<int, int>();
-                foreach (Tessera t in tesserae)
-                {
-                    sides[t.Polygon.Length] = sides.GetValueOrDefault(t.Polygon.Length) + 1;
-                }
-
-                Console.WriteLine("  вершин у куска: " + string.Join("  ",
-                    sides.OrderBy(kv => kv.Key)
-                         .Select(kv => $"{kv.Key}→{kv.Value * 100.0 / tesserae.Count:0.0}%")));
             }
 
             CoverageMask mask = CoverageMask.Rasterise(layout, tesserae);
@@ -334,6 +327,10 @@ internal static class Program
                 N(bareR / layout.ModuleHeightMm), N(mask.BareBeyond(layout.ModuleHeightMm * 0.3)),
                 N(shape.AreaMin), N(shape.AreaP5), N(shape.AreaMedian), N(shape.AreaP95), N(shape.AreaMax),
                 N(shape.TinyShare), N(shape.SliverShare), N(shape.ManySidedShare),
+                N(shape.QuadShare), N(shape.PentaShare), N(shape.HexaShare), N(shape.HeptaPlusShare),
+                N(shape.ConcaveShare), N(shape.SelfIntersectingShare),
+                N(shape.JointP50Mm), N(shape.JointP90Mm), N(shape.JointMaxMm),
+                N(shape.WideJointArea), N(shape.JointArea),
                 N(shape.KinkShare),
                 shape.CourseCount.ToString(CultureInfo.InvariantCulture),
                 N(shape.StubCourseShare), N(shape.MedianCourseLength), N(shape.FillerShare),
@@ -344,6 +341,8 @@ internal static class Program
                 colour.ColorsUsed.ToString(CultureInfo.InvariantCulture),
                 colour.RareColors.ToString(CultureInfo.InvariantCulture),
                 N(colour.DominantShare), N(colour.LightestGap), N(colour.BandingShare), N(colour.MergedShare),
+                N(colour.SingletonShare), N(colour.LoudSingletonShare), N(colour.SmallIslandShare),
+                N(colour.DeltaLMedian), N(colour.HueDriftShare),
                 result.ModulesReassigned.ToString(CultureInfo.InvariantCulture),
                 watch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture),
             }));
