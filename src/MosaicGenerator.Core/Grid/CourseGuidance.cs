@@ -20,17 +20,18 @@ public sealed class CourseGuidance
     /// Tensor confidence at which the photograph's own texture takes the direction over entirely.
     /// Below it the two are mixed in proportion, so there is no seam where the echo hands over.
     ///
-    /// It reads as a high bar — the field's coherence only reaches it in the top percent of cells —
-    /// but that is not what it does. The blend is linear in coherence, so the number sets the slope,
-    /// not a gate: at the median coherence of a photograph it still gives the picture about a
-    /// quarter of the say. Swept over the eight photographs at 0.08, 0.12, 0.18, 0.25, 0.35, 0.5,
-    /// 0.8 and 1.5, on 15×15 and 60×60. Everything above 0.35 is flat, and below 0.25 the layout
-    /// comes apart: fillers 0.10 → 0.14, courses 11.4 → 7.8 pieces. Following the photograph's own
-    /// field more closely looks like the faithful thing to do and is not — in flat or softly modelled
-    /// ground that field is smooth but arbitrary, and streamlines through it collide and stop, while
-    /// the contour echo is evenly spaced by construction. Measured on the previews too: at 0.12 the
-    /// gull's sky loses its courses altogether and the portrait's face breaks up rather than
-    /// resolving. See <c>docs/kursy-i-tsvet-plan.md</c>, step 3.
+    /// The blend is linear in coherence, so the number sets the slope, not a gate: on a structured
+    /// photograph the field's coherence reaches p75 ≈ 0.3–0.4, so the picture already carries much
+    /// of the say there; on flat ground its coherence stays near zero and the contour echo leads.
+    /// Re-swept over the eight photographs at 0.18, 0.25, 0.35 and 0.5 on 15×15 and 30×30 after the
+    /// direction field's confidence was fixed to normalise against a frame percentile rather than
+    /// its single strongest cell (<c>docs/pole-napravleniy-plan.md</c>). 0.35 sits at the knee:
+    /// the photograph leads on 12–34 % of the panel (was 1–4 % before the fix) and courses hold
+    /// together best. Lower and the layout frays — at 0.18 the portrait's background runs 55–60 %
+    /// of its courses under three pieces. Following the photograph's own field more closely looks
+    /// like the faithful thing to do and is not — in flat or softly modelled ground that field is
+    /// smooth but arbitrary, and streamlines through it collide and stop, while the contour echo is
+    /// evenly spaced by construction.
     /// </summary>
     public const double FullConfidence = 0.35;
 

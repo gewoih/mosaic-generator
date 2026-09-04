@@ -49,6 +49,31 @@ public class DirectionFieldTests
     }
 
     [Fact]
+    public void ALocalHighlightDoesNotSilenceASoftContour()
+    {
+        // A hard bright dot in one corner (a specular highlight) alongside a soft horizontal
+        // contour across the middle. The highlight's gradient is far stronger, so normalising the
+        // field's confidence against the frame maximum used to push the contour's coherence to
+        // near zero. It must stay a direction the layout can follow.
+        SourceImage image = ImageFactory.FromPixels(200, 200, (x, y) =>
+        {
+            if (x >= 10 && x < 24 && y >= 10 && y < 24)
+            {
+                return "#FFFFFF";
+            }
+
+            return y < 100 ? "#6E6E6E" : "#8A8A8A";
+        });
+
+        DirectionField field = DirectionField.Compute(image, new CropRect(0, 0, 200, 200), fieldAspect: 1.0);
+
+        Assert.Equal(0.0, NormaliseHalfTurn(field.ThetaAt(0.5, 0.5)), 0.2);
+        Assert.True(
+            field.CoherenceAt(0.5, 0.5) > 0.2,
+            $"soft contour lost its voice to the highlight: {field.CoherenceAt(0.5, 0.5):0.000}");
+    }
+
+    [Fact]
     public void TheFieldIsDeterministic()
     {
         SourceImage image = ImageFactory.Checkerboard(160, 120, "#202020", "#E0E0E0");

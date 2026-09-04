@@ -143,26 +143,35 @@ public sealed class DirectionField
         // is just a sign flip on the gradient's own double-angle vector.
         var vx = new double[width * height];
         var vy = new double[width * height];
+        var coherence = new double[width * height];
         double maxCoherence = 1e-9;
         for (int k = 0; k < vx.Length; k++)
         {
-            double coherence = Math.Sqrt(((jxx[k] - jyy[k]) * (jxx[k] - jyy[k])) + (4.0 * jxy[k] * jxy[k]));
-            maxCoherence = Math.Max(maxCoherence, coherence);
+            coherence[k] = Math.Sqrt(((jxx[k] - jyy[k]) * (jxx[k] - jyy[k])) + (4.0 * jxy[k] * jxy[k]));
+            maxCoherence = Math.Max(maxCoherence, coherence[k]);
 
             // gradient double-angle vector: (Jxx - Jyy, 2 Jxy); negate for the perpendicular.
             vx[k] = -(jxx[k] - jyy[k]);
             vy[k] = -(2.0 * jxy[k]);
         }
 
+        // Confidence of the orientation is normalised against a high percentile of the frame, not
+        // its single strongest cell: one specular highlight or one hard contour used to set the
+        // divisor and push every other cell's vector to nearly zero, so the diffused field was a
+        // constant 0.08 plateau echoing the frame rather than the subject. A percentile lets a
+        // photograph of soft gradients still hand the diffusion a real direction to hold onto.
+        double confidenceScale = Math.Max(1e-9, ContourSet.Percentile(coherence, 0.95));
+
         var edge = new double[vx.Length];
         for (int k = 0; k < vx.Length; k++)
         {
             double length = Math.Sqrt((vx[k] * vx[k]) + (vy[k] * vy[k]));
+
+            // edge feeds ContourSet.LevelFor / FigureMask, which threshold it against absolute
+            // constants — it stays on the frame maximum so the silhouette detection is untouched.
             edge[k] = Math.Min(1.0, length / maxCoherence);
 
-            // Normalised against a fraction of the strongest edge, not the strongest itself, so a
-            // photograph of soft gradients still hands the diffusion something to hold onto.
-            double weight = Math.Min(1.0, length / (maxCoherence * 0.7));
+            double weight = Math.Min(1.0, length / confidenceScale);
             if (length > 1e-12)
             {
                 vx[k] = vx[k] / length * weight;
@@ -304,7 +313,9 @@ public sealed class DirectionField
 
         // A faint hint only: the seeded cells must yield to diffusion from the real edges, so an
         // edge's orientation can flood the whole region around it instead of staying a thin band.
-        const double hint = 0.08;
+        // Kept well below the confidence real edges now carry (percentile-normalised, ≈1), so the
+        // field's coherence stops being a constant plateau at this value.
+        const double hint = 0.03;
         for (int k = 0; k < vx.Length; k++)
         {
             if (Math.Sqrt((vx[k] * vx[k]) + (vy[k] * vy[k])) < 0.05)

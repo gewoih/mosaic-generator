@@ -148,7 +148,7 @@ public static class ContourSet
         return best;
     }
 
-    private static double Percentile(ReadOnlySpan<double> values, double fraction)
+    internal static double Percentile(ReadOnlySpan<double> values, double fraction)
     {
         var sorted = values.ToArray();
         Array.Sort(sorted);
