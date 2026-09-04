@@ -1,6 +1,5 @@
 using MosaicGenerator.Core.Colors;
 using MosaicGenerator.Core.Domain;
-using MosaicGenerator.Core.Optics;
 using MosaicGenerator.Core.Material;
 using MosaicGenerator.Core.Rendering;
 using MosaicGenerator.Core.Skia;
@@ -39,22 +38,22 @@ public class SkiaMosaicRendererTests
     }
 
     [Fact]
-    public void ANarrowJointReadsDarkerThanAWideOne()
+    public void TheJointIsTheDarkGreyTheOptionsCarryWhateverTheLayout()
     {
-        // Same white adhesive either way. A 1 mm slot beside 8 mm tesserae is a deep, narrow
-        // crack that almost nothing reaches; a 3 mm one is open enough to stay mid grey.
+        // The joint used to be derived per layout from a slot form factor. That optics went with
+        // the joint compensation it was written for: at every size this tool is used for the joint
+        // is 1 mm, so the formula only ever returned the one value RenderOptions now holds.
         RenderPlan fine = RenderGeometry.Compute(
             PlanFactory.Striped(seed: 5, module: 4, grout: 1), RenderOptions.Cartoon);
         RenderPlan coarse = RenderGeometry.Compute(
             PlanFactory.Striped(seed: 5, module: 20, grout: 3), RenderOptions.Cartoon);
 
-        Assert.True(
-            fine.JointColor.ToLab().L < coarse.JointColor.ToLab().L - 10,
-            $"fine joint L* {fine.JointColor.ToLab().L:0.0} should sit well below "
-            + $"coarse {coarse.JointColor.ToLab().L:0.0}");
+        Assert.Equal(RenderOptions.Cartoon.JointColor.ToBytes(), fine.JointColor.ToBytes());
+        Assert.Equal(RenderOptions.Cartoon.JointColor.ToBytes(), coarse.JointColor.ToBytes());
 
-        // Still a long way below the adhesive seen in the open, which is the whole point.
-        Assert.True(coarse.JointColor.ToLab().L < JointAppearance.AdhesiveWhite.ToLab().L - 25);
+        // White adhesive down an ungrouted slot: dark, and a long way below the adhesive in the
+        // open at roughly L* 91.
+        Assert.InRange(fine.JointColor.ToLab().L, 30.0, 45.0);
     }
 
     [Fact]

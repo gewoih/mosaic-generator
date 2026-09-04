@@ -5,7 +5,6 @@ using MosaicGenerator.Core.Colors;
 using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Grid;
 using MosaicGenerator.Core.Imaging;
-using MosaicGenerator.Core.Optics;
 using MosaicGenerator.Core.Pipeline;
 using MosaicGenerator.Core.Quantization;
 using MosaicGenerator.Core.Rendering;
@@ -22,8 +21,7 @@ namespace MosaicGenerator.Diag;
 internal static class Program
 {
     private sealed record Run(
-        string Name, double WidthCm, double HeightCm, double AlongMm, double AnchorX, int MaxColors,
-        bool CompensateJoint);
+        string Name, double WidthCm, double HeightCm, double AlongMm, double AnchorX, int MaxColors);
 
     private static int Main(string[] args)
     {
@@ -46,9 +44,6 @@ internal static class Program
                 ?? string.Join(',', ModuleSelector.AvailableModulesMm.Select(m => m.ToString(CultureInfo.InvariantCulture))))
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => double.Parse(x, CultureInfo.InvariantCulture))];
-        bool[] jointModes = args.Contains("--both-joint") ? [true, false]
-            : args.Contains("--nojoint") ? [false] : [true];
-
         // Which ΔE the palette matcher runs on for this whole invocation. Everything the bench
         // *measures* stays on CIE76, so two runs — one per metric — are scored by the same ruler.
         ColorDistance.MatchingMetric = (Arg(args, "--metric") ?? "cie76").ToLowerInvariant() switch
@@ -105,18 +100,14 @@ internal static class Program
                 {
                     foreach (double anchor in anchors)
                     {
-                        foreach (bool joint in jointModes)
-                        {
-                            // Invariant, and no decimal comma: a name like "21,7x29" would
-                            // split the CSV row it is written into.
-                            string name = string.Create(CultureInfo.InvariantCulture,
-                                $"{w:0.#}x{h:0.#}-m{along:0.#}-c{colors}")
-                                + (anchors.Length > 1
-                                    ? string.Create(CultureInfo.InvariantCulture, $"-x{anchor:0.00}")
-                                    : string.Empty)
-                                + (jointModes.Length > 1 ? (joint ? "-joint" : "-nojoint") : string.Empty);
-                            runs.Add(new Run(name, w, h, along, anchor, colors, joint));
-                        }
+                        // Invariant, and no decimal comma: a name like "21,7x29" would
+                        // split the CSV row it is written into.
+                        string name = string.Create(CultureInfo.InvariantCulture,
+                            $"{w:0.#}x{h:0.#}-m{along:0.#}-c{colors}")
+                            + (anchors.Length > 1
+                                ? string.Create(CultureInfo.InvariantCulture, $"-x{anchor:0.00}")
+                                : string.Empty);
+                        runs.Add(new Run(name, w, h, along, anchor, colors));
                     }
                 }
             }
@@ -146,7 +137,6 @@ internal static class Program
                 PaletteId = palette.Id,
                 CropAnchorX = run.AnchorX,
                 MaxColors = run.MaxColors,
-                CompensateJoint = run.CompensateJoint,
             };
 
             var watch = Stopwatch.StartNew();
@@ -322,11 +312,9 @@ internal static class Program
 
             CoverageMask mask = CoverageMask.Rasterise(layout, tesserae);
             Metrics.Shape shape = Metrics.Shapes(layout, tesserae, field, guidance);
-            // Always measured as the wall will show it — shade plus the joint around it — whatever
-            // space the matching itself worked in. Otherwise the two variants are scored by
-            // different yardsticks and cannot be compared.
-            CieLab[] observed = PaletteObservation.Lab(
-                palette, JointOptics.For(layout, palette.TypicalThicknessMm));
+            // The shades as they are in the hand — the same space the matching runs in, so the
+            // bench scores the objective the pipeline actually pursues.
+            CieLab[] observed = PaletteObservation.Lab(palette);
             Metrics.Colour colour = Metrics.Colours(
                 layout, tesserae, cells, indices, palette, observed, run.MaxColors);
             (double bareR, _) = mask.LargestBare();

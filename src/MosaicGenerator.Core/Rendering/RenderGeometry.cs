@@ -1,7 +1,6 @@
 using MosaicGenerator.Core.Colors;
 using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Grid;
-using MosaicGenerator.Core.Optics;
 
 namespace MosaicGenerator.Core.Rendering;
 
@@ -18,8 +17,6 @@ public static class RenderGeometry
 
         MosaicLayout layout = plan.Layout;
         double pixelsPerMm = ResolveScale(layout, options);
-
-        JointOptics joint = JointOptics.For(layout, plan.Palette.TypicalThicknessMm);
 
         int pixelWidth = Math.Max(1, (int)Math.Round(layout.PanelWidthMm * pixelsPerMm));
         int pixelHeight = Math.Max(1, (int)Math.Round(layout.PanelHeightMm * pixelsPerMm));
@@ -79,7 +76,7 @@ public static class RenderGeometry
             Layout = layout,
             Modules = modules,
             TesseraPixels = Math.Sqrt(medianArea),
-            JointColor = joint.JointRgb,
+            JointColor = options.JointColor,
         };
     }
 

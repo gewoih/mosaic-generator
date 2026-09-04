@@ -3,7 +3,6 @@ using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Grid;
 using MosaicGenerator.Core.Imaging;
 using MosaicGenerator.Core.Material;
-using MosaicGenerator.Core.Optics;
 using MosaicGenerator.Core.Quantization;
 using MosaicGenerator.Core.Rendering;
 using MosaicGenerator.Core.Validation;
@@ -55,16 +54,18 @@ public sealed class MosaicGenerationService(
         LinearRgb[] cells = CellSampler.Sample(image, crop, layout, tesserae);
         CieLab[] cellLab = Quantizer.ToLab(cells);
 
-        // How the joint will read is a consequence of the layout, not a choice: white adhesive
-        // seen down a slot whose depth follows from the tessera thickness beside it.
-        JointOptics joint = JointOptics.For(layout, palette.TypicalThicknessMm);
-
-        // Matching against the shades as the joint will show them. The joint has a lightness of
-        // its own and pulls everything toward it, so matching the bare shades would hand over a
-        // panel flatter than the macquette it was approved from.
-        CieLab[] paletteLab = request.CompensateJoint
-            ? PaletteObservation.Lab(palette, joint)
-            : PaletteObservation.Lab(palette);
+        // Matching against the shades as they are in the hand, not as the joint will show them.
+        // Compensating the match for the joint was measured over 48 runs — eight photographs,
+        // three sizes, two bites — and scored on its own yardstick, the panel as the wall shows
+        // it, which it optimises directly and so ought to win outright. It won 24 of 48: a coin
+        // flip, median gain 0,01 ΔE, and the four photographs it helped were the three gulls and
+        // the dolphin. What it cost was visible — a near-neutral target makes the correction reach
+        // for a lighter *and* more saturated article, which is how a dolphin's grey back came out
+        // in pink smalt. It could not win because `paletteLab` is two things at once: the space the
+        // match runs in, where the correction belongs, and the range ToneMap stretches the
+        // photograph into, where it does not — the stretch into a compressed range and the reach
+        // back out of it cancel. See docs/tsvetnoy-obodok-plan.md.
+        CieLab[] paletteLab = PaletteObservation.Lab(palette);
 
         // The photograph is laid out in the range the material has before a shade is chosen. Matching
         // the camera's tones directly is accurate and flat: on the gull it put one article over 71 %
@@ -121,9 +122,6 @@ public sealed class MosaicGenerationService(
             ColorsBeforeReduction = reduction.ColorsBefore,
             ModulesReassigned = reduction.ModulesReassigned,
             StoppedAtPinnedColors = reduction.StoppedAtPinnedColors,
-            JointColor = joint.JointRgb,
-            JointLightness = joint.JointLinear.ToLab().L,
-            ModuleAreaFraction = joint.ModuleFraction,
             TesseraCount = tesserae.Count,
             CutTesseraCount = tesserae.Count(t => t.IsCut),
         };

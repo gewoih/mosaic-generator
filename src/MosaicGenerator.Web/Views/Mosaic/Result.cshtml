@@ -12,13 +12,6 @@
         <div><dt>Панно</dt><dd>@((stored.PanelWidthMm / 10).ToString("0.#", ru)) × @((stored.PanelHeightMm / 10).ToString("0.#", ru)) см</dd></div>
         <div><dt>Сетка</dt><dd>@stored.Columns × @stored.Rows = @stored.TotalModules.ToString("N0", ru) модулей, @stored.ActualAcross по короткой стороне</dd></div>
         <div><dt>Модуль / шов</dt><dd>@stored.ModuleSizeMm.ToString("0.#", ru) мм / @stored.GroutWidthMm.ToString("0.#", ru) мм</dd></div>
-        <div>
-            <dt>Шов в работе</dt>
-            <dd>
-                <span class="chip" style="background:@stored.JointHex"></span>
-                L* @stored.JointLightness.ToString("0", ru), доля тессеры @((stored.ModuleAreaFraction * 100).ToString("0", ru)) %
-            </dd>
-        </div>
         <div><dt>Поля</dt><dd>@stored.MarginXMm.ToString("0.#", ru) мм по бокам, @stored.MarginYMm.ToString("0.#", ru) мм сверху и снизу</dd></div>
         <div>
             <dt>Палитра</dt>
@@ -49,17 +42,8 @@
         </p>
     }
     <p class="summary__note">
-        @if (stored.CompensateJoint)
-        {
-            <text>
-                Цвет подобран с поправкой на шов: он имеет собственную светлоту и тянет к себе
-                каждую тессеру, так что без поправки панно вышло бы площе макета.
-            </text>
-        }
-        else
-        {
-            <text>Поправка на шов выключена: артикулы подобраны по цвету самой смальты.</text>
-        }
+        Артикулы подобраны по цвету самой смальты. Шов не затирается и имеет собственную
+        светлоту, так что набранное панно сядет чуть глуше картона.
         В обе картинки записан физический масштаб, поэтому печать «100 %» выходит в реальный размер.
     </p>
 </section>

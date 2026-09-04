@@ -22,18 +22,6 @@ public sealed record StoredResult
 
     public required double GroutWidthMm { get; init; }
 
-    /// <summary>What the joint reads as once the slot has taken its light, for display.</summary>
-    public required string JointHex { get; init; }
-
-    /// <summary>Its lightness in L*, against roughly 91 for the adhesive out in the open.</summary>
-    public required double JointLightness { get; init; }
-
-    /// <summary>Share of the panel that is tessera rather than joint.</summary>
-    public required double ModuleAreaFraction { get; init; }
-
-    /// <summary>Whether shade matching accounted for that joint.</summary>
-    public required bool CompensateJoint { get; init; }
-
     /// <summary>The upload this was generated from, so the parameters can be tried again.</summary>
     public required string SourceId { get; init; }
 

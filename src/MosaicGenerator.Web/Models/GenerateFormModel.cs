@@ -45,9 +45,6 @@ public sealed class GenerateFormModel
     [Range(0, 1, ErrorMessage = "Кадрирование: доля от 0 до 1.")]
     public double CropAnchorY { get; set; } = 0.5;
 
-    [Display(Name = "Учитывать шов при подборе цвета")]
-    public bool CompensateJoint { get; set; } = true;
-
     /// <summary>Articles the colour ceiling must leave alone, chosen from a previous result.</summary>
     [Display(Name = "Не сворачивать артикулы")]
     public string[] PinnedArticles { get; set; } = [];
@@ -93,7 +90,6 @@ public sealed class GenerateFormModel
             GroutWidthMm = choice.GroutMm,
             CropAnchorX = CropAnchorX,
             CropAnchorY = CropAnchorY,
-            CompensateJoint = CompensateJoint,
             PinnedArticles = PinnedArticles,
             PaletteId = PaletteId,
             MaxColors = MaxColors,

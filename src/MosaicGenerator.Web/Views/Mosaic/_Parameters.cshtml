@@ -69,15 +69,4 @@
                value="@Model.Form.WastePercent.ToString(CultureInfo.InvariantCulture)" />
         <span class="field__hint">Покрывает рез, бой и брак при наборе.</span>
     </label>
-    <label class="field field--wide check">
-        <input type="checkbox" name="CompensateJoint" value="true" checked="@Model.Form.CompensateJoint" />
-        <span>
-            <span class="field__label">Учитывать шов при подборе цвета</span>
-            <span class="field__hint">
-                Клей белый, затирки нет: в глубине шва он затенён и имеет собственную светлоту,
-                к которой тянет каждую тессеру. Без поправки панно выходит площе макета.
-            </span>
-        </span>
-    </label>
-    <input type="hidden" name="CompensateJoint" value="false" />
 </fieldset>

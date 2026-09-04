@@ -237,10 +237,6 @@ public sealed class MosaicController(
         CropAnchorY = form.CropAnchorY,
         PinnedArticles = form.PinnedArticles,
         StoppedAtPinnedColors = result.StoppedAtPinnedColors,
-        JointHex = result.JointColor.ToHex(),
-        JointLightness = result.JointLightness,
-        ModuleAreaFraction = result.ModuleAreaFraction,
-        CompensateJoint = form.CompensateJoint,
         Columns = result.Layout.Columns,
         Rows = result.Layout.Rows,
         PanelWidthMm = result.Layout.PanelWidthMm,
@@ -284,7 +280,6 @@ public sealed class MosaicController(
         PricePerKgRub = stored.PricePerKgRub,
         CropAnchorX = stored.CropAnchorX,
         CropAnchorY = stored.CropAnchorY,
-        CompensateJoint = stored.CompensateJoint,
         PinnedArticles = [.. stored.PinnedArticles],
     };
 

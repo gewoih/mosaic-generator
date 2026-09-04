@@ -28,14 +28,6 @@ public sealed record MosaicRequest
     public double CropAnchorY { get; init; } = 0.5;
 
     /// <summary>
-    /// Whether shade matching accounts for the joint the tessera will sit in. On by default:
-    /// a quarter to a half of every cell is adhesive seen down a slot, and that grey compresses
-    /// the panel's range unless the shades are chosen against it. Left off it can be compared
-    /// against the naive match.
-    /// </summary>
-    public bool CompensateJoint { get; init; } = true;
-
-    /// <summary>
     /// Articles the colour ceiling must not discard, however few modules they cover. A handful of
     /// tesserae can carry a whole picture — a beak, a catchlight — and counting alone cannot see
     /// that.

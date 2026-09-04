@@ -30,15 +30,6 @@ public sealed record MosaicResult
     /// <summary>Pinned articles alone exceeded the colour ceiling, so the ceiling gave way.</summary>
     public required bool StoppedAtPinnedColors { get; init; }
 
-    /// <summary>What the joint reads as, once the slot has taken its light.</summary>
-    public required Rgb JointColor { get; init; }
-
-    /// <summary>Lightness of that joint in L*, against roughly 91 for the adhesive in the open.</summary>
-    public required double JointLightness { get; init; }
-
-    /// <summary>Share of the panel that is tessera rather than joint.</summary>
-    public required double ModuleAreaFraction { get; init; }
-
     /// <summary>How many tesserae the layout holds. No longer a plain grid count.</summary>
     public required int TesseraCount { get; init; }
 
