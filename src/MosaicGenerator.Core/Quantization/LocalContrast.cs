@@ -37,8 +37,10 @@ namespace MosaicGenerator.Core.Quantization;
 /// dead band of zero scores three times better on banding, because there the stage's lifting is
 /// what keeps the sky from collapsing into steps. The cartoon says otherwise — it plants a bright
 /// yellow island a dozen pieces across in the middle of the orange, a colour the photograph does
-/// not contain. The filter cannot tell a gradient from texture; that is the missing segmentation,
-/// TODO п. 9, not a wrong threshold here.
+/// not contain. The filter cannot tell a gradient from texture — and segmentation, which looked
+/// like the answer, is not: it was built and measured over ten photographs on 2026-09-05 and made
+/// the layout worse at every radius (docs/zony-i-granitsy-plan.md). So this stays a known limit of
+/// the stage, not a wrong threshold here.
 ///
 /// A ceiling, because a fir against bright sky is already separated by three tonal steps. Lifting
 /// it further buys no distinction that is not already there and would ring a bright collar around

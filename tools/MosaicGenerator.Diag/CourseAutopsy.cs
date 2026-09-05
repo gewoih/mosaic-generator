@@ -107,12 +107,11 @@ internal static class CourseAutopsy
     /// <summary>
     /// Whether the fill can get away from a structural barrier (border, contour) once it is seeded
     /// near one, split by where the seed landed: inside the figure's silhouette, on flat background,
-    /// or on background with its own texture. Asked twice, for the two mechanisms TODO п.1 names:
-    /// offset/sweep seeding (moving fill away from what it was seeded from) and holes grown in step 5
-    /// (closing what the first pass missed). If courses in the silhouette or on flat ground die
-    /// against the structural barrier, or holes there refuse to grow a course, far more than on
-    /// textured ground, that is the mechanism TODO п.1 calls "the fill cannot get away from the
-    /// border/contour".
+    /// or on background with its own texture. Asked twice, for the two mechanisms that can strand a
+    /// course: offset/sweep seeding (moving fill away from what it was seeded from) and holes grown
+    /// in step 5 (closing what the first pass missed). If courses in the silhouette or on flat ground
+    /// die against the structural barrier, or holes there refuse to grow a course, far more than on
+    /// textured ground, then the fill cannot get away from the border or contour.
     /// </summary>
     private static void Zones(
         IReadOnlyList<LayoutDiagnostics.Attempt> attempts, MosaicLayout layout, DirectionField field, double alongMm)
@@ -320,9 +319,11 @@ internal static class CourseAutopsy
     /// <summary>
     /// Where the filler pieces — single tesserae grown in step 5, not part of any course — actually
     /// sit: inside the figure's silhouette, on flat background, or on textured background, against
-    /// each zone's share of every piece on the panel. A ratio above one means fillers gather there —
-    /// the geographic half of TODO п.1's claim that crumble concentrates where the picture has no
-    /// structure to seed a course from.
+    /// each zone's share of every piece on the panel. A ratio above one means fillers gather there.
+    /// This was built to test the claim that crumble concentrates where the picture has no structure
+    /// to seed a course from; the claim was refuted (docs/kroshevo-mekhanizm-a-plan.md) — crumble
+    /// follows the photograph's own fine texture instead — and the measurement is kept because it is
+    /// how that was shown.
     /// </summary>
     private static void FillerZones(
         MosaicLayout layout, IReadOnlyList<Tessera> tesserae, DirectionField field, Role[] roles)
