@@ -83,8 +83,7 @@ builder.Services.AddSingleton(provider =>
         // arrives as noise the tone stretch then multiplies into crumb. Flattened along the form,
         // where a course shows nothing anyway, and barely across it, where the step between two
         // courses lives. Figures over eight photographs in docs/anizotropnoe-uploshchenie-plan.md.
-        Flatten = new FlattenSettings(
-            RadiusTesserae: 0.7, RangeDe: 6.0, Iterations: 2, AcrossFraction: 0.25),
+        Flatten = FlattenSettings.Production,
         Cartoon = RenderOptions.Cartoon with
         {
             PixelsPerStep = options.CartoonPixelsPerStep,

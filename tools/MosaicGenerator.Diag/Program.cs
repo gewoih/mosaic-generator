@@ -63,7 +63,8 @@ internal static class Program
             Console.Error.WriteLine(
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
                 "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
-                "[--metric cie76|ciede2000] [--why]");
+                "[--metric cie76|ciede2000] [--flatten off|r,dE,n,across] " +
+                "[--why]");
             return 1;
         }
 
@@ -76,16 +77,25 @@ internal static class Program
             return 1;
         }
 
-        // SPIKE: --flatten <радиус в тессерах>,<ΔE>,<итераций> — уплощение фото до сэмплирования.
-        FlattenSettings? flatten = null;
+        // Уплощение фото до сэмплирования. По умолчанию — то же, что в вебе: стенд, меряющий
+        // не тот пайплайн, что стоит в проде, судит нижние этапы по сигналу, которого они не
+        // видят. "off" выключает, "<радиус>,<ΔE>,<итераций>[,<поперёк>]" переопределяет.
+        FlattenSettings? flatten = FlattenSettings.Production;
         if (Arg(args, "--flatten") is { } fl)
         {
-            double[] fp = [.. fl.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture))];
-            flatten = new FlattenSettings(
-                fp[0],
-                fp.Length > 1 ? fp[1] : 12.0,
-                fp.Length > 2 ? (int)fp[2] : 3,
-                fp.Length > 3 ? fp[3] : 0.25);
+            flatten = fl.Equals("off", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : Parse(fl);
+
+            static FlattenSettings Parse(string spec)
+            {
+                double[] fp = [.. spec.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture))];
+                return new FlattenSettings(
+                    fp[0],
+                    fp.Length > 1 ? fp[1] : 12.0,
+                    fp.Length > 2 ? (int)fp[2] : 3,
+                    fp.Length > 3 ? fp[3] : 0.25);
+            }
         }
 
         var loader = new SkiaImageLoader();
@@ -96,7 +106,8 @@ internal static class Program
         SourceImage image = loader.Load(new MemoryStream(bytes), options.ImageLimits);
         Console.WriteLine(
             $"фото {image.Width}×{image.Height}, палитра {palette.Name} ({palette.Colors.Count} цветов), " +
-            $"метрика подбора {ColorDistance.MatchingMetric}\n");
+            $"метрика подбора {ColorDistance.MatchingMetric}\n" +
+            $"уплощение {(flatten is null ? "выкл" : $"{flatten.RadiusTesserae}/{flatten.RangeDe}/{flatten.Iterations}/{flatten.AcrossFraction}")}\n");
 
         double[] anchors = [.. (Arg(args, "--crops") ?? "0.5")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
