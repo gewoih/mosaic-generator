@@ -21,10 +21,24 @@ namespace MosaicGenerator.Core.Quantization;
 /// Two limits, and both are load-bearing:
 ///
 /// A dead band, because below about two and a half ΔE what separates a cell from its surroundings
-/// is not the ridge, it is grain, ripple and the encoder's noise. Multiplying that is how the tone
-/// stretch produced speckle before <see cref="CoherentMap"/> was written, so the noise floor is
-/// subtracted before anything is multiplied. Measured: without it, banding on the landscape at A4
-/// went from 1,6 % to 5,3 % and the sky was visibly speckled.
+/// is not the ridge, it is grain, ripple and the residue of sampling. Multiplying that is how the
+/// tone stretch produced speckle before <see cref="CoherentMap"/> was written, so the noise floor
+/// is subtracted before anything is multiplied.
+///
+/// The figure was first taken on an unflattened photograph and re-derived 2026-09-05 on the signal
+/// the pipeline actually carries now, over 33 runs at 0 / 1,0 / 1,5 / 2,5 / 3,5 / 5,0 ΔE. Below
+/// 2,5 banding and speckle both get worse; above it they get better, but only because the stage
+/// stops firing — merging climbs 0,425 → 0,448 and the mean ΔE to the photograph falls, which is
+/// this stage giving up the very separation it exists to make. Between 1,5 and 3,5 the difference
+/// is inside the run-to-run scatter, so 2,5 sits in a flat optimum rather than on a peak, and there
+/// is no reading of the numbers under which moving it is an improvement.
+///
+/// One case runs the other way and is worth knowing about: on a pure gradient (`sunset` at A4) a
+/// dead band of zero scores three times better on banding, because there the stage's lifting is
+/// what keeps the sky from collapsing into steps. The cartoon says otherwise — it plants a bright
+/// yellow island a dozen pieces across in the middle of the orange, a colour the photograph does
+/// not contain. The filter cannot tell a gradient from texture; that is the missing segmentation,
+/// TODO п. 9, not a wrong threshold here.
 ///
 /// A ceiling, because a fir against bright sky is already separated by three tonal steps. Lifting
 /// it further buys no distinction that is not already there and would ring a bright collar around

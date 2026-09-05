@@ -14,6 +14,7 @@ public sealed record MosaicGenerationOptions
 
     public RenderOptions Scheme { get; init; } = RenderOptions.Scheme;
 
-    /// <summary>SPIKE: edge-preserving flattening before sampling. Null = off (production default).</summary>
+    /// <summary>Edge-preserving flattening before sampling. Null = off.</summary>
     public FlattenSettings? Flatten { get; init; }
+
 }

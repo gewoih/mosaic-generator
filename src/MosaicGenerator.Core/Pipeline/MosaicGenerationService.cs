@@ -110,7 +110,12 @@ public sealed class MosaicGenerationService(
             PinnedIndices(palette, request.PinnedArticles), tesserae);
 
         // The reduction re-quantised orphaned cells one at a time as their shade was dropped, so the
-        // same disagreement can reappear on the surviving, smaller palette.
+        // same disagreement can reappear on the surviving, smaller palette. Measured 2026-09-05 over
+        // 33 runs: dropping this pass costs singles 0,63 → 0,92 %, loud singles 0,41 → 0,61 %, pieces
+        // in islands of one or two 1,60 → 2,05 %, and puts a white tessera in the middle of the
+        // dolphin's dark back. It is a symptom cure and known to be one — the disagreement should not
+        // be created in the first place, which is TODO п.11 — but until the reducer stops making it,
+        // removing this pass only puts the crumb back.
         int[] finalIndices = CoherentMap.Settle(
             mappedLab, paletteLab, reduction.Indices, reduction.RetainedColors, neighbourhood);
 
