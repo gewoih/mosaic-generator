@@ -44,6 +44,16 @@ public sealed class MosaicGenerationService(
         CropRect crop = ImageCropper.CropToAspect(
             image.Width, image.Height, layout.FieldAspect, request.CropAnchorX, request.CropAnchorY);
 
+        // Flatten the photograph into plateaus at tessera scale before anything reads it. Texture
+        // finer than a piece cannot be laid; averaged under a tessera it becomes noise, and ToneMap
+        // then multiplies that noise into crumb. The kernel is an ellipse laid along the form, so
+        // what it spends is detail no course could show. See docs/ploskosti-spike.md.
+        if (_options.Flatten is { } flatten)
+        {
+            image = ImageFlattener.Apply(
+                image, layout.ModuleWidthMm / layout.FieldWidthMm * crop.Width, flatten);
+        }
+
         // Courses that run with the form rather than straight across: the direction field says
         // which way, the tessellation lays the tesserae along it. A featureless photograph leaves
         // the field horizontal, so the layout falls back to a plain staggered grid.

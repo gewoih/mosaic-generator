@@ -13,4 +13,7 @@ public sealed record MosaicGenerationOptions
     public RenderOptions Cartoon { get; init; } = RenderOptions.Cartoon;
 
     public RenderOptions Scheme { get; init; } = RenderOptions.Scheme;
+
+    /// <summary>SPIKE: edge-preserving flattening before sampling. Null = off (production default).</summary>
+    public FlattenSettings? Flatten { get; init; }
 }

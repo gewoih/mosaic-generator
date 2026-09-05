@@ -76,8 +76,20 @@ internal static class Program
             return 1;
         }
 
+        // SPIKE: --flatten <радиус в тессерах>,<ΔE>,<итераций> — уплощение фото до сэмплирования.
+        FlattenSettings? flatten = null;
+        if (Arg(args, "--flatten") is { } fl)
+        {
+            double[] fp = [.. fl.Split(',').Select(v => double.Parse(v, CultureInfo.InvariantCulture))];
+            flatten = new FlattenSettings(
+                fp[0],
+                fp.Length > 1 ? fp[1] : 12.0,
+                fp.Length > 2 ? (int)fp[2] : 3,
+                fp.Length > 3 ? fp[3] : 0.25);
+        }
+
         var loader = new SkiaImageLoader();
-        var options = new MosaicGenerationOptions();
+        var options = new MosaicGenerationOptions { Flatten = flatten };
         var service = new MosaicGenerationService(loader, new SkiaMosaicRenderer(), options);
 
         byte[] bytes = File.ReadAllBytes(photo);
@@ -159,8 +171,13 @@ internal static class Program
             MosaicLayout layout = MosaicLayout.Compute(request);
             CropRect crop = ImageCropper.CropToAspect(
                 image.Width, image.Height, layout.FieldAspect, request.CropAnchorX, request.CropAnchorY);
+            // The bench re-derives the layout, so it has to read the same picture the service did.
+            SourceImage source = flatten is null
+                ? image
+                : ImageFlattener.Apply(
+                    image, layout.ModuleWidthMm / layout.FieldWidthMm * crop.Width, flatten);
             DirectionField field = DirectionField.Compute(
-                image, crop, layout.FieldAspect, DirectionField.ResolutionFor(layout));
+                source, crop, layout.FieldAspect, DirectionField.ResolutionFor(layout));
             LayoutDiagnostics.Reset();
             LayoutDiagnostics.Enabled = autopsy;
             IReadOnlyList<Tessera> tesserae = Tessellation.Advected(layout, field);
@@ -177,7 +194,7 @@ internal static class Program
                 $"самопересечение {why[2] * 100.0 / whyTotal:0}%  " +
                 $"кривизна {why[3] * 100.0 / whyTotal:0}%  " +
                 $"шаги {why[4] * 100.0 / whyTotal:0}%  (всего {why.Sum()})");
-            LinearRgb[] cells = CellSampler.Sample(image, crop, layout, tesserae);
+            LinearRgb[] cells = CellSampler.Sample(source, crop, layout, tesserae);
             int[] indices = [.. result.Scheme.Modules.Select(m => m.ColorIndex)];
 
             File.WriteAllText(

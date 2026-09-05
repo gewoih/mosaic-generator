@@ -126,68 +126,12 @@ public sealed class DirectionField
             luminance[i] = colour[i].L;
         }
 
-        // Structure tensor components, smoothed so the orientation is stable over a few pixels.
-        var jxx = new double[width * height];
-        var jyy = new double[width * height];
-        var jxy = new double[width * height];
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double gx = Sobel(luminance, width, height, x, y, horizontal: true);
-                double gy = Sobel(luminance, width, height, x, y, horizontal: false);
-                int k = (y * width) + x;
-                jxx[k] = gx * gx;
-                jyy[k] = gy * gy;
-                jxy[k] = gx * gy;
-            }
-        }
-
-        Blur(jxx, width, height);
-        Blur(jyy, width, height);
-        Blur(jxy, width, height);
-
-        // Row orientation = a quarter turn from the dominant gradient. In double-angle terms that
-        // is just a sign flip on the gradient's own double-angle vector.
-        var vx = new double[width * height];
-        var vy = new double[width * height];
-        var coherence = new double[width * height];
-        double maxCoherence = 1e-9;
-        for (int k = 0; k < vx.Length; k++)
-        {
-            coherence[k] = Math.Sqrt(((jxx[k] - jyy[k]) * (jxx[k] - jyy[k])) + (4.0 * jxy[k] * jxy[k]));
-            maxCoherence = Math.Max(maxCoherence, coherence[k]);
-
-            // gradient double-angle vector: (Jxx - Jyy, 2 Jxy); negate for the perpendicular.
-            vx[k] = -(jxx[k] - jyy[k]);
-            vy[k] = -(2.0 * jxy[k]);
-        }
-
-        // Confidence of the orientation is normalised against a high percentile of the frame, not
-        // its single strongest cell: one specular highlight or one hard contour used to set the
-        // divisor and push every other cell's vector to nearly zero, so the diffused field was a
-        // constant 0.08 plateau echoing the frame rather than the subject. A percentile lets a
-        // photograph of soft gradients still hand the diffusion a real direction to hold onto.
-        double confidenceScale = Math.Max(1e-9, ContourSet.Percentile(coherence, 0.95));
-
-        var edge = new double[vx.Length];
-        for (int k = 0; k < vx.Length; k++)
-        {
-            double length = Math.Sqrt((vx[k] * vx[k]) + (vy[k] * vy[k]));
-
-            // edge feeds ContourSet.LevelFor / FigureMask, which threshold it against absolute
-            // constants — it stays on the frame maximum so the silhouette detection is untouched.
-            edge[k] = Math.Min(1.0, length / maxCoherence);
-
-            double weight = Math.Min(1.0, length / confidenceScale);
-            if (length > 1e-12)
-            {
-                vx[k] = vx[k] / length * weight;
-                vy[k] = vy[k] / length * weight;
-            }
-        }
-
-        Blur(edge, width, height);
+        // Which way the picture runs — measured by the shared tensor, so the flattener that
+        // steers by it and the courses that follow it read the same numbers.
+        StructureTensor tensor = StructureTensor.Compute(luminance, width, height);
+        double[] vx = [.. tensor.Vx];
+        double[] vy = [.. tensor.Vy];
+        double[] edge = [.. tensor.Edge];
 
         // Separate the subject from the surround while the colour is still to hand: ContourSet draws
         // the silhouette off this, so the ring closes even where the subject matches the surround in
@@ -249,46 +193,6 @@ public sealed class DirectionField
         }
 
         return colour;
-    }
-
-    private static double Sobel(double[] source, int width, int height, int x, int y, bool horizontal)
-    {
-        double At(int dx, int dy) => source[
-            (Math.Clamp(y + dy, 0, height - 1) * width) + Math.Clamp(x + dx, 0, width - 1)];
-
-        return horizontal
-            ? (At(1, -1) + (2 * At(1, 0)) + At(1, 1)) - (At(-1, -1) + (2 * At(-1, 0)) + At(-1, 1))
-            : (At(-1, 1) + (2 * At(0, 1)) + At(1, 1)) - (At(-1, -1) + (2 * At(0, -1)) + At(1, -1));
-    }
-
-    /// <summary>Separable 1-2-1 blur, three passes ≈ a Gaussian of σ ≈ 2 px.</summary>
-    private static void Blur(double[] field, int width, int height)
-    {
-        var scratch = new double[field.Length];
-        for (int pass = 0; pass < 3; pass++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    int xm = Math.Max(0, x - 1);
-                    int xp = Math.Min(width - 1, x + 1);
-                    scratch[(y * width) + x] =
-                        (field[(y * width) + xm] + (2.0 * field[(y * width) + x]) + field[(y * width) + xp]) / 4.0;
-                }
-            }
-
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    int ym = Math.Max(0, y - 1);
-                    int yp = Math.Min(height - 1, y + 1);
-                    field[(y * width) + x] =
-                        (scratch[(ym * width) + x] + (2.0 * scratch[(y * width) + x]) + scratch[(yp * width) + x]) / 4.0;
-                }
-            }
-        }
     }
 
     /// <summary>Mean orientation of the frame cells, filled into every interior cell the tensor was unsure of.</summary>
