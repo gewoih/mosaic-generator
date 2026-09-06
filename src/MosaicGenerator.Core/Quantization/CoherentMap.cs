@@ -24,6 +24,17 @@ namespace MosaicGenerator.Core.Quantization;
 /// gradient pays the penalty once, at whichever point crossing it is cheapest, so the transition
 /// moves as a front rather than dissolving into scattered outliers.
 ///
+/// That weighting has a blind spot: a piece whose sampled colour has run far from its neighbours
+/// carries almost no weight either way, so a loud single the quantiser stranded in a field keeps
+/// its wrong article — the penalty ceiling sits below the colour error holding it there. A single
+/// piece of a loud article that <em>no</em> neighbour shares, sitting more than
+/// <see cref="IsolationLoudGap"/> ΔE from every neighbour's article, reads as a set-out error
+/// whatever the photograph said, so it is treated apart: the agreement term is keyed straight to
+/// the article the neighbours mostly carry and given <see cref="IsolationNeighbourWeight"/>, and
+/// the piece snaps to it unless its colour is markedly nearer some other article. A piece with
+/// even one same-article neighbour — a strip end, a one-wide line, any island of two or more, a
+/// boundary or gradient piece — does not qualify. See <c>docs/krap-odinochki-plan.md</c>.
+///
 /// The other half of the ledger — gradation the photograph held and the work laid as one shade — is
 /// not addressed here, and cannot be by a rule of this shape. See <c>docs/kursy-i-tsvet-plan.md</c>,
 /// step 1, for the three formulations that were measured against it and for why a penalty keyed on a
@@ -38,6 +49,26 @@ public static class CoherentMap
     /// that picked it.
     /// </summary>
     private const double NeighbourWeight = 0.5;
+
+    /// <summary>
+    /// The weight the agreement term is given for a loud lone single (see
+    /// <see cref="IsolationTarget"/>). Higher than <see cref="NeighbourWeight"/> on purpose: one
+    /// piece of a loud article no neighbour shares reads as a set-out error, not a shade, even
+    /// where the photograph justified it — so it snaps to the article around it unless its own
+    /// colour is markedly nearer some other one. See <c>docs/krap-odinochki-plan.md</c>.
+    /// </summary>
+    private const double IsolationNeighbourWeight = 3.0;
+
+    /// <summary>Fewest neighbours a piece needs before the isolation pull can apply.</summary>
+    private const int IsolationMinRing = 5;
+
+    /// <summary>
+    /// How far a lone piece's article must sit from <em>every</em> neighbour's article — as
+    /// <see cref="ColorDistance.Match"/>, so hue-weighted, roughly ΔE — before the isolation pull
+    /// fires. Below this the ordinary agreement term already handles it and the piece is not loud
+    /// enough to read as a set-out error.
+    /// </summary>
+    private const double IsolationLoudGap = 10.0;
 
     /// <summary>
     /// Passes over every cell. Diminishing returns after a handful: what one pass fixes, later
@@ -112,6 +143,8 @@ public static class CoherentMap
                     weightSum += w;
                 }
 
+                int isolationTarget = IsolationTarget(neighbours, assigned, assigned[i], paletteLab);
+
                 int best = assigned[i];
                 double bestCost = double.MaxValue;
 
@@ -119,7 +152,12 @@ public static class CoherentMap
                 {
                     double cost = ColorDistance.MatchSquared(cellLab[i], paletteLab[candidate]);
 
-                    if (weightSum > 0.0)
+                    if (isolationTarget >= 0)
+                    {
+                        cost += IsolationNeighbourWeight *
+                            ColorDistance.MatchSquared(paletteLab[candidate], paletteLab[isolationTarget]);
+                    }
+                    else if (weightSum > 0.0)
                     {
                         double disagreement = 0.0;
                         for (int n = 0; n < neighbours.Length; n++)
@@ -154,5 +192,61 @@ public static class CoherentMap
         }
 
         return assigned;
+    }
+
+    /// <summary>
+    /// The article a piece should snap to when it is a loud lone single, or -1 when the isolation
+    /// pull does not apply. It applies only when the piece has at least <see cref="IsolationMinRing"/>
+    /// neighbours, <em>no</em> neighbour shares its article, and its article sits more than
+    /// <see cref="IsolationLoudGap"/> ΔE from <em>every</em> neighbour's article — a single piece the
+    /// quantiser stranded on a loud shade in a field that agrees around it. The target is the
+    /// article most of those neighbours carry (ties to the lower palette index, for reproducibility).
+    ///
+    /// A piece with even one same-article neighbour is not touched: that rules out strip ends,
+    /// one-wide lines and every island of two or more. A boundary or gradient piece has same-article
+    /// neighbours on its own side, so it is ruled out too.
+    /// </summary>
+    private static int IsolationTarget(
+        int[] neighbours, int[] assigned, int own, ReadOnlySpan<CieLab> paletteLab)
+    {
+        if (neighbours.Length < IsolationMinRing)
+        {
+            return -1;
+        }
+
+        double loudGapSquared = IsolationLoudGap * IsolationLoudGap;
+        int mode = -1;
+        int modeCount = 0;
+        for (int a = 0; a < neighbours.Length; a++)
+        {
+            int article = assigned[neighbours[a]];
+            if (article == own)
+            {
+                return -1;
+            }
+
+            if (ColorDistance.MatchSquared(paletteLab[own], paletteLab[article]) <= loudGapSquared)
+            {
+                return -1;
+            }
+
+            int count = 0;
+            for (int b = 0; b < neighbours.Length; b++)
+            {
+                if (assigned[neighbours[b]] == article)
+                {
+                    count++;
+                }
+            }
+
+            // Fixed order and a low-index tie-break, so a run is reproducible.
+            if (count > modeCount || (count == modeCount && article < mode))
+            {
+                modeCount = count;
+                mode = article;
+            }
+        }
+
+        return mode;
     }
 }

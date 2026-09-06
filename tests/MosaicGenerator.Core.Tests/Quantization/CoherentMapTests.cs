@@ -78,6 +78,127 @@ public class CoherentMapTests
         Assert.Equal(initial, settled);
     }
 
+    [Fact]
+    public void ALoudLoneSingleSnapsToTheArticleAroundIt()
+    {
+        // 5×5 field of one shade; the middle cell carries enough colour that, judged alone, it
+        // quantises onto a saturated article far from the field — a loud single no neighbour shares.
+        CieLab sky = new(60, 2, -15);
+        CieLab loud = new(62, 22, -32);
+        CieLab[] palette = [sky, loud];
+
+        CieLab[] cellLab = [.. Enumerable.Repeat(sky, 25)];
+        cellLab[12] = new CieLab(61, 18, -29); // nearest to `loud`
+
+        CellNeighbourhood hood = CellNeighbourhood.Build(GridOf(5, 5, spacing: 10), reach: 15);
+        int[] initial = Quantizer.Map(cellLab, palette);
+        Assert.Equal(1, initial[12]);
+
+        int[] settled = CoherentMap.Settle(cellLab, palette, initial, [0, 1], hood);
+
+        Assert.Equal(0, settled[12]);
+        Assert.Equal(0, settled[0]);
+        Assert.Equal(0, settled[24]);
+    }
+
+    [Fact]
+    public void ALoudLoneSingleSnapsEvenWhenTheRingCarriesTwoArticles()
+    {
+        // The ring around the middle cell is split 4/4 between two field shades — not unanimous,
+        // but they agree that the middle cell's loud third article does not belong. It snaps to the
+        // article most of the ring carries (ties to the lower index).
+        CieLab left = new(45, 0, 2);
+        CieLab right = new(52, 0, -2);
+        CieLab loud = new(60, 25, 20);
+        CieLab[] palette = [left, right, loud];
+
+        var cellLab = new CieLab[25];
+        for (int r = 0; r < 5; r++)
+        {
+            for (int c = 0; c < 5; c++)
+            {
+                cellLab[(r * 5) + c] = c < 2 ? left : right;
+            }
+        }
+
+        cellLab[12] = loud;
+
+        CellNeighbourhood hood = CellNeighbourhood.Build(GridOf(5, 5, spacing: 10), reach: 15);
+        int[] initial = Quantizer.Map(cellLab, palette);
+        Assert.Equal(2, initial[12]);
+
+        int[] settled = CoherentMap.Settle(cellLab, palette, initial, [0, 1, 2], hood);
+
+        Assert.NotEqual(2, settled[12]);
+    }
+
+    [Fact]
+    public void APieceThatSharesAnArticleWithAnyNeighbourIsLeftAlone()
+    {
+        // The middle column is a deliberate line of a second shade. Every one of its cells has a
+        // same-article neighbour along the line, so none is a lone single — the strip stays whole,
+        // and so would a strip end, a one-wide line, or any island of two.
+        CieLab field = new(55, 0, -5);
+        CieLab line = new(58, 20, -28);
+        CieLab[] palette = [field, line];
+
+        var cellLab = new CieLab[25];
+        for (int r = 0; r < 5; r++)
+        {
+            for (int c = 0; c < 5; c++)
+            {
+                cellLab[(r * 5) + c] = c == 2 ? line : field;
+            }
+        }
+
+        CellNeighbourhood hood = CellNeighbourhood.Build(GridOf(5, 5, spacing: 10), reach: 15);
+        int[] initial = Quantizer.Map(cellLab, palette);
+        int[] settled = CoherentMap.Settle(cellLab, palette, initial, [0, 1], hood);
+
+        for (int r = 0; r < 5; r++)
+        {
+            Assert.Equal(1, settled[(r * 5) + 2]);
+        }
+    }
+
+    [Fact]
+    public void ANearbyShadeIsNotSnappedAwayJustForBeingAlone()
+    {
+        // The middle cell is a lone single sitting exactly on a shade only ~4 ΔE from the field's —
+        // below the loud gap, so the isolation pull does not fire and the ordinary term keeps the
+        // cell where its own colour puts it.
+        CieLab field = new(60, 0, -10);
+        CieLab close = new(61, 0, -6);
+        CieLab[] palette = [field, close];
+
+        CieLab[] cellLab = [.. Enumerable.Repeat(field, 25)];
+        cellLab[12] = close;
+
+        CellNeighbourhood hood = CellNeighbourhood.Build(GridOf(5, 5, spacing: 10), reach: 15);
+        int[] initial = Quantizer.Map(cellLab, palette);
+        Assert.Equal(1, initial[12]);
+
+        int[] settled = CoherentMap.Settle(cellLab, palette, initial, [0, 1], hood);
+
+        Assert.Equal(1, settled[12]);
+    }
+
+    private static Tessera[] GridOf(int cols, int rows, double spacing) =>
+        [.. Enumerable.Range(0, cols * rows).Select(k =>
+        {
+            int cx = k % cols, cy = k / cols;
+            double x = cx * spacing, y = cy * spacing;
+            return new Tessera
+            {
+                Polygon = [new(x, y), new(x + 8, y), new(x + 8, y + 8), new(x, y + 8)],
+                Centroid = new PointD(x, y),
+                AreaMm2 = 64,
+                CourseId = cy,
+                IndexInCourse = cx,
+                IsCut = false,
+            };
+        })];
+
     private static Tessera[] LineOf(int count, double spacing) =>
         [.. Enumerable.Range(0, count).Select(i => new Tessera
         {
