@@ -114,6 +114,12 @@ public static class Tessellation
         // that buys long runs is paid for here, by not laying the slivers it squeezes out.
         double floorAcross = across * 0.6;
 
+        // Below this an edge is a nick from the Voronoi cut, not a side the mosaicist knapped, and the
+        // cell is squared back up to lose it (SquareOff). Half the plate: shorter than that and the
+        // "edge" is the 1-3 mm shaving a neighbouring course took off a corner, which no hand can
+        // knap and which is the fifth vertex behind the pentagon count (docs/forma-kuska-plan.md).
+        double nickEdge = across * 0.5;
+
         double dAlong = along + grout;
         double dAcross = across + grout;
         double dSeed = 0.82 * dAcross;   // an offset seed survives even where the parent course curves
@@ -518,7 +524,9 @@ public static class Tessellation
 
                 if (cell.Length >= 3)
                 {
-                    cut.Add(Finish(cell, fieldWidth, fieldHeight, alongMm * across, courseId, index));
+                    cut.Add(Finish(
+                        FieldGeometry.SquareOff(cell, nickEdge),
+                        fieldWidth, fieldHeight, alongMm * across, courseId, index));
                     producedBy?.Add(i);
                 }
             }
