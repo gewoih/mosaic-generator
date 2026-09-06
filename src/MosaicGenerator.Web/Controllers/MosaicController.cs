@@ -117,8 +117,10 @@ public sealed class MosaicController(
             return View(nameof(Index), BuildIndexModel(form));
         }
 
+        // Guaranteed non-null here: the validation above rejects a request with no upload and no
+        // SourceId before this point is reached.
         string id = results.Save(
-            Describe(result, form, palette, choice, sourceId),
+            Describe(result, form, palette, choice, sourceId!),
             result.CartoonPng, result.SchemePng, result.LegendPng);
 
         logger.LogInformation(

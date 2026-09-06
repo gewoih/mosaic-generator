@@ -23,8 +23,6 @@ public static class RenderGeometry
 
         double originX = layout.MarginXMm * pixelsPerMm;
         double originY = layout.MarginYMm * pixelsPerMm;
-        double fieldRight = (layout.MarginXMm + layout.FieldWidthMm) * pixelsPerMm;
-        double fieldBottom = (layout.MarginYMm + layout.FieldHeightMm) * pixelsPerMm;
 
         IReadOnlyList<Tessera> tesserae = plan.Tesserae;
         var modules = new List<RenderedModule>(tesserae.Count);
@@ -48,8 +46,6 @@ public static class RenderGeometry
             int colorIndex = plan.ColorIndices[i];
             CieLab lab = plan.Palette.Colors[colorIndex].Lab;
 
-            PointD[] quad = Clamp(nominal, originX, fieldRight, originY, fieldBottom);
-
             modules.Add(new RenderedModule
             {
                 Row = tessera.CourseId,
@@ -60,7 +56,7 @@ public static class RenderGeometry
                 Centroid = new PointD(
                     originX + (tessera.Centroid.X * pixelsPerMm),
                     originY + (tessera.Centroid.Y * pixelsPerMm)),
-                Quad = quad,
+                Quad = nominal,
                 FillColor = lab.ToRgb().Clamped(),
             });
         }
@@ -122,20 +118,5 @@ public static class RenderGeometry
         }
 
         return new RectD(minX, minY, maxX - minX, maxY - minY);
-    }
-
-    /// <summary>The nominal outline in output pixels, each vertex held inside the field.</summary>
-    private static PointD[] Clamp(
-        PointD[] nominal, double fieldLeft, double fieldRight, double fieldTop, double fieldBottom)
-    {
-        var clamped = new PointD[nominal.Length];
-        for (int i = 0; i < nominal.Length; i++)
-        {
-            clamped[i] = new PointD(
-                Math.Clamp(nominal[i].X, fieldLeft, fieldRight),
-                Math.Clamp(nominal[i].Y, fieldTop, fieldBottom));
-        }
-
-        return clamped;
     }
 }
