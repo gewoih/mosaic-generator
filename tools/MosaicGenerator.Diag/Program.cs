@@ -151,7 +151,7 @@ internal static class Program
             "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "minWidthP5", "minWidthP1", "narrowWidth", "uncuttable", "awkward", "structureOff", "edgesCrossed",
             "dE_mean", "dE_p95", "dE_max", "colorsBefore", "colorsUsed", "rare", "dominant",
             "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "midIsland", "dL_med", "hueDrift",
-            "reassigned", "ms"));
+            "reassigned", "settle2", "settle2Moved", "ms"));
 
         foreach (Run run in runs)
         {
@@ -386,6 +386,8 @@ internal static class Program
                 N(colour.MidIslandShare),
                 N(colour.DeltaLMedian), N(colour.HueDriftShare),
                 result.ModulesReassigned.ToString(CultureInfo.InvariantCulture),
+                result.SettledAfterReduction.ToString(CultureInfo.InvariantCulture),
+                result.SettledAfterReductionOnMoved.ToString(CultureInfo.InvariantCulture),
                 watch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture),
             }));
 

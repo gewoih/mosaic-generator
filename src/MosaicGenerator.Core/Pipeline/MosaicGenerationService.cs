@@ -120,12 +120,37 @@ public sealed class MosaicGenerationService(
             mappedLab, indices, paletteLab, request.MaxColors,
             PinnedIndices(palette, request.PinnedArticles), tesserae, neighbourhood);
 
-        // A second settling pass on the reduced palette. The hand-out above cut how much this pass
-        // has to fix but did not remove the need for it: measured 2026-09-06, dropping it took loud
-        // singles from 0,0013 to 0,0026 (worse than before п. 13) and lost the blue candle on
-        // human 40×40. So it stays — the "two passes" tech-debt is reduced, not closed.
+        // A settling pass against the reduced palette. Not the first pass run twice, which is how
+        // TODO п. 13 read it before it was measured: the first pass settles against 138 cluster
+        // representatives, this one against the dozen articles the cartoon actually keeps, and it
+        // is the only place the layout is agreed against the final set. Measured over 33 runs
+        // (docs/redukciya-svyazka-plan.md §11): it moves 0,89 % of the pieces, and 54 % of those
+        // the reducer never touched — a piece whose own article survived can be left with no
+        // same-article neighbour once the shades around it are handed out, and no fix inside
+        // PaletteReducer can reach it. Dropping this pass took loud singles from 0,0013 to 0,0026
+        // and lost the blue candle on human 40×40.
         int[] finalIndices = CoherentMap.Settle(
             mappedLab, paletteLab, reduction.Indices, reduction.RetainedColors, neighbourhood);
+
+        // Diagnostic only — nothing downstream reads these, and counting them changes no tessera.
+        // They are the sentry on the settled question of TODO п. 13: a piece this pass moves that
+        // the reducer never touched was never an orphan, so its disagreement cannot have come from
+        // the hand-out. Should the hand-out start coming apart, the second count rises.
+        int settledAfterReduction = 0;
+        int settledAfterReductionOnMoved = 0;
+        for (int cell = 0; cell < finalIndices.Length; cell++)
+        {
+            if (finalIndices[cell] == reduction.Indices[cell])
+            {
+                continue;
+            }
+
+            settledAfterReduction++;
+            if (reduction.Indices[cell] != indices[cell])
+            {
+                settledAfterReductionOnMoved++;
+            }
+        }
 
         var plan = new MosaicPlan(layout, palette, finalIndices, request.EffectiveSeed, tesserae);
         MaterialReport report = MaterialCalculator.Calculate(plan, request.WasteFactor, request.PricePerKgRub);
@@ -146,6 +171,8 @@ public sealed class MosaicGenerationService(
             Scheme = scheme,
             ColorsBeforeReduction = reduction.ColorsBefore,
             ModulesReassigned = reduction.ModulesReassigned,
+            SettledAfterReduction = settledAfterReduction,
+            SettledAfterReductionOnMoved = settledAfterReductionOnMoved,
             StoppedAtPinnedColors = reduction.StoppedAtPinnedColors,
             TesseraCount = tesserae.Count,
             CutTesseraCount = tesserae.Count(t => t.IsCut),

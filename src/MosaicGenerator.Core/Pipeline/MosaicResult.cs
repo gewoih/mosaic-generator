@@ -33,6 +33,19 @@ public sealed record MosaicResult
     /// <summary>Modules that ended up on a different shade than the quantiser first chose.</summary>
     public required int ModulesReassigned { get; init; }
 
+    /// <summary>
+    /// Diagnostic (TODO п. 13): modules the settling pass after the reduction moved. Measures how
+    /// much work that second pass still has to do once the reducer hands out orphans coherently.
+    /// </summary>
+    public required int SettledAfterReduction { get; init; }
+
+    /// <summary>
+    /// Diagnostic (TODO п. 13): of <see cref="SettledAfterReduction"/>, those the reducer had also
+    /// moved. The rest were never orphans, so their disagreement was not created by the hand-out —
+    /// it appeared because the shades around them changed.
+    /// </summary>
+    public required int SettledAfterReductionOnMoved { get; init; }
+
     /// <summary>Pinned articles alone exceeded the colour ceiling, so the ceiling gave way.</summary>
     public required bool StoppedAtPinnedColors { get; init; }
 
