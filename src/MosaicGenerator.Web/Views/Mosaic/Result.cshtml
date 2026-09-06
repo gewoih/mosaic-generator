@@ -42,9 +42,10 @@
         </p>
     }
     <p class="summary__note">
-        Артикулы подобраны по цвету самой смальты. Шов не затирается и имеет собственную
-        светлоту, так что набранное панно сядет чуть глуше картона.
-        В обе картинки записан физический масштаб, поэтому печать «100 %» выходит в реальный размер.
+        Артикулы подобраны по цвету самой смальты; шов не затирается и нарисован прямо на картоне.
+        В картинки записан физический масштаб, поэтому печать «100 %» выходит в реальный размер —
+        сверьтесь по линейке 100 мм под картоном. Легенда с плашками и числом кусков — отдельным
+        листом, чтобы не отнимать место у поля мозаики.
     </p>
 </section>
 
@@ -73,6 +74,14 @@
             <strong>Картон под набор</strong>
             <span>@stored.CartoonWidthPx × @stored.CartoonHeightPx px, @stored.CartoonDpi.ToString("0", ru) dpi</span>
             <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })">Скачать PNG</a>
+        </figcaption>
+    </figure>
+    <figure>
+        <img src="@Url.Action("Legend", new { id })" alt="Легенда: плашки, коды, число кусков" />
+        <figcaption>
+            <strong>Легенда (печатать отдельным листом)</strong>
+            <span>плашка, номер, артикул и число кусков по каждому оттенку</span>
+            <a class="button button--small" href="@Url.Action("Legend", new { id, download = true })">Скачать PNG</a>
         </figcaption>
     </figure>
     <figure>

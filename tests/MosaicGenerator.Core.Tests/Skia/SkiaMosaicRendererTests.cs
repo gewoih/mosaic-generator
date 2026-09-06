@@ -13,16 +13,17 @@ public class SkiaMosaicRendererTests
     private readonly SkiaMosaicRenderer _renderer = new();
 
     [Fact]
-    public void TheCartoonIsAValidPngOfTheExpectedSize()
+    public void TheCartoonIsAValidPngOfThePanelPlusTheScaleStrip()
     {
         RenderPlan plan = Plan();
+        CartoonSheet sheet = CartoonSheet.Layout(plan);
 
-        byte[] png = _renderer.RenderCartoon(plan);
+        using SKBitmap? decoded = SKBitmap.Decode(_renderer.RenderCartoon(plan));
 
-        using SKBitmap? decoded = SKBitmap.Decode(png);
         Assert.NotNull(decoded);
         Assert.Equal(plan.PixelWidth, decoded!.Width);
-        Assert.Equal(plan.PixelHeight, decoded.Height);
+        Assert.Equal(sheet.HeightPx, decoded.Height);
+        Assert.True(decoded.Height > plan.PixelHeight);
     }
 
     [Fact]
@@ -38,11 +39,30 @@ public class SkiaMosaicRendererTests
     }
 
     [Fact]
+    public void TheScaleStripBelowThePanelCarriesInk()
+    {
+        RenderPlan plan = Plan();
+
+        using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderCartoon(plan))!;
+
+        int dark = 0;
+        for (int y = plan.PixelHeight; y < decoded.Height; y++)
+        {
+            for (int x = 0; x < decoded.Width; x++)
+            {
+                if (decoded.GetPixel(x, y).Red < 90)
+                {
+                    dark++;
+                }
+            }
+        }
+
+        Assert.True(dark > 0, "the strip should carry the ruler and its label");
+    }
+
+    [Fact]
     public void TheJointIsTheDarkGreyTheOptionsCarryWhateverTheLayout()
     {
-        // The joint used to be derived per layout from a slot form factor. That optics went with
-        // the joint compensation it was written for: at every size this tool is used for the joint
-        // is 1 mm, so the formula only ever returned the one value RenderOptions now holds.
         RenderPlan fine = RenderGeometry.Compute(
             PlanFactory.Striped(seed: 5, module: 4, grout: 1), RenderOptions.Cartoon);
         RenderPlan coarse = RenderGeometry.Compute(
@@ -50,9 +70,6 @@ public class SkiaMosaicRendererTests
 
         Assert.Equal(RenderOptions.Cartoon.JointColor.ToBytes(), fine.JointColor.ToBytes());
         Assert.Equal(RenderOptions.Cartoon.JointColor.ToBytes(), coarse.JointColor.ToBytes());
-
-        // White adhesive down an ungrouted slot: dark, and a long way below the adhesive in the
-        // open at roughly L* 91.
         Assert.InRange(fine.JointColor.ToLab().L, 30.0, 45.0);
     }
 
@@ -68,9 +85,30 @@ public class SkiaMosaicRendererTests
             (int)(module.Bounds.X + (module.Bounds.Width / 2)),
             (int)(module.Bounds.Y + (module.Bounds.Height / 2)));
 
-        // Flat fill: the centre of the module is exactly its article colour.
         (byte r, byte g, byte b) = module.FillColor.ToBytes();
         Assert.Equal((r, g, b), (centre.Red, centre.Green, centre.Blue));
+    }
+
+    [Fact]
+    public void TheLegendSheetShowsASwatchPerArticleInItsColour()
+    {
+        MosaicPlan plan = PlanFactory.Striped(seed: 5);
+        MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 1500m);
+        CartoonLegend legend = CartoonLegend.Layout(report);
+
+        using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderLegend(report))!;
+
+        Assert.Equal(legend.WidthPx, decoded.Width);
+        Assert.Equal(legend.HeightPx, decoded.Height);
+
+        foreach (CartoonLegendEntry entry in legend.Entries)
+        {
+            SKColor swatch = decoded.GetPixel(
+                (int)(entry.Swatch.X + (entry.Swatch.Width / 2)),
+                (int)(entry.Swatch.Y + (entry.Swatch.Height / 2)));
+            (byte r, byte g, byte b) = report.Lines[entry.LineIndex].Color.Rgb.Clamped().ToBytes();
+            Assert.Equal((r, g, b), (swatch.Red, swatch.Green, swatch.Blue));
+        }
     }
 
     [Fact]
@@ -106,7 +144,7 @@ public class SkiaMosaicRendererTests
     }
 
     [Fact]
-    public void BothOutputsCarryThePhysicalScale()
+    public void TheCartoonAndSchemeCarryThePhysicalScale()
     {
         MosaicPlan plan = PlanFactory.Striped(seed: 5);
         RenderPlan cartoon = RenderGeometry.Compute(plan, RenderOptions.Cartoon);
@@ -118,8 +156,6 @@ public class SkiaMosaicRendererTests
 
         Assert.Equal(cartoon.PixelsPerMm, cartoonScale!.Value, 1e-3);
         Assert.Equal(scheme.PixelsPerMm, schemeScale!.Value, 1e-3);
-
-        // The cartoon is rendered at twice the scheme's resolution — it prints 1:1.
         Assert.True(cartoonScale.Value > schemeScale.Value);
     }
 

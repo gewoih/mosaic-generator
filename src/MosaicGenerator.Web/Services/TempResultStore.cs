@@ -35,7 +35,7 @@ public sealed class TempResultStore : IResultStore
         Directory.CreateDirectory(_root);
     }
 
-    public string Save(StoredResult result, byte[] cartoonPng, byte[] schemePng)
+    public string Save(StoredResult result, byte[] cartoonPng, byte[] schemePng, byte[] legendPng)
     {
         ArgumentNullException.ThrowIfNull(result);
 
@@ -47,6 +47,7 @@ public sealed class TempResultStore : IResultStore
 
         File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Cartoon)), cartoonPng);
         File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Scheme)), schemePng);
+        File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Legend)), legendPng);
         File.WriteAllText(
             Path.Combine(directory, ManifestFileName),
             JsonSerializer.Serialize(result, SerializerOptions));
@@ -75,8 +76,13 @@ public sealed class TempResultStore : IResultStore
     public byte[]? ReadImage(string id, ResultImage image) =>
         TryResolve(id, FileNameFor(image), out string? path) ? File.ReadAllBytes(path) : null;
 
-    private static string FileNameFor(ResultImage image) =>
-        image == ResultImage.Cartoon ? "cartoon.png" : "scheme.png";
+    private static string FileNameFor(ResultImage image) => image switch
+    {
+        ResultImage.Cartoon => "cartoon.png",
+        ResultImage.Scheme => "scheme.png",
+        ResultImage.Legend => "legend.png",
+        _ => throw new ArgumentOutOfRangeException(nameof(image), image, null),
+    };
 
     /// <summary>
     /// Resolves an id supplied by the client. The id must be a bare GUID and the resolved path is

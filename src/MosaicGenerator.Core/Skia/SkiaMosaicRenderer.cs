@@ -16,12 +16,17 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        return Render(plan, canvas =>
+        CartoonSheet sheet = CartoonSheet.Layout(plan);
+
+        return Render(sheet.WidthPx, sheet.HeightPx, plan.PixelsPerMm, canvas =>
         {
-            canvas.Clear(ToSKColor(plan.JointColor));
+            canvas.Clear(SchemeBackground);
 
             using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
             using var builder = new SKPathBuilder();
+
+            fill.Color = ToSKColor(plan.JointColor);
+            canvas.DrawRect(0, 0, plan.PixelWidth, plan.PixelHeight, fill);
 
             foreach (RenderedModule module in plan.Modules)
             {
@@ -33,11 +38,77 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
 
                 builder.Reset();
                 builder.AddPoly(corners, close: true);
-
                 using SKPath path = builder.Detach();
 
                 fill.Color = ToSKColor(module.FillColor);
                 canvas.DrawPath(path, fill);
+            }
+
+            DrawRuler(canvas, plan, sheet);
+        });
+    }
+
+    private static void DrawRuler(SKCanvas canvas, RenderPlan plan, CartoonSheet sheet)
+    {
+        using var stroke = new SKPaint
+        {
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            Color = SchemeOutline,
+            StrokeWidth = Math.Max(1f, (float)(plan.PixelsPerMm * 0.4)),
+        };
+        using var text = new SKPaint { IsAntialias = true, Color = SchemeText };
+        using var font = new SKFont(SchemeFont.Typeface, (float)sheet.FontSizePx);
+
+        CartoonRuler ruler = sheet.Ruler;
+        canvas.DrawLine(
+            (float)ruler.BarStart.X, (float)ruler.BarStart.Y,
+            (float)ruler.BarEnd.X, (float)ruler.BarEnd.Y, stroke);
+        foreach (CartoonTick tick in ruler.Ticks)
+        {
+            canvas.DrawLine(
+                (float)tick.X, (float)ruler.BarStart.Y,
+                (float)tick.X, (float)(ruler.BarStart.Y + tick.Height), stroke);
+        }
+
+        canvas.DrawText(
+            ruler.Label, (float)ruler.LabelAnchor.X, (float)ruler.LabelAnchor.Y,
+            SKTextAlign.Left, font, text);
+    }
+
+    public byte[] RenderLegend(MaterialReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        CartoonLegend legend = CartoonLegend.Layout(report);
+
+        return Render(legend.WidthPx, legend.HeightPx, legend.PixelsPerMm, canvas =>
+        {
+            canvas.Clear(SchemeBackground);
+
+            using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
+            using var stroke = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                Color = SchemeOutline,
+                StrokeWidth = Math.Max(1f, (float)(legend.PixelsPerMm * 0.3)),
+            };
+            using var text = new SKPaint { IsAntialias = true, Color = SchemeText };
+            using var font = new SKFont(SchemeFont.Typeface, (float)legend.FontSizePx);
+            float baseline = -(font.Metrics.Ascent + font.Metrics.Descent) / 2f;
+
+            foreach (CartoonLegendEntry entry in legend.Entries)
+            {
+                RectD s = entry.Swatch;
+                fill.Color = ToSKColor(report.Lines[entry.LineIndex].Color.Rgb.Clamped());
+                canvas.DrawRect((float)s.X, (float)s.Y, (float)s.Width, (float)s.Height, fill);
+                canvas.DrawRect((float)s.X, (float)s.Y, (float)s.Width, (float)s.Height, stroke);
+
+                canvas.DrawText(
+                    $"{entry.Code}  {entry.Article}  ×{entry.ModuleCount}",
+                    (float)entry.TextAnchor.X, (float)entry.TextAnchor.Y + baseline,
+                    SKTextAlign.Left, font, text);
             }
         });
     }
@@ -47,7 +118,7 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(report);
 
-        return Render(plan, canvas =>
+        return Render(plan.PixelWidth, plan.PixelHeight, plan.PixelsPerMm, canvas =>
         {
             canvas.Clear(SchemeBackground);
 
@@ -125,9 +196,9 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
         return -(metrics.Ascent + metrics.Descent) / 2f;
     }
 
-    private static byte[] Render(RenderPlan plan, Action<SKCanvas> draw)
+    private static byte[] Render(int width, int height, double pixelsPerMm, Action<SKCanvas> draw)
     {
-        var info = new SKImageInfo(plan.PixelWidth, plan.PixelHeight, SKColorType.Rgba8888, SKAlphaType.Opaque);
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque);
 
         using var bitmap = new SKBitmap(info);
         using (var canvas = new SKCanvas(bitmap))
@@ -139,7 +210,7 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
         using SKData encoded = image.Encode(SKEncodedImageFormat.Png, 100)
             ?? throw new InvalidOperationException("PNG encoding failed.");
 
-        return PngMetadata.WithPhysicalScale(encoded.ToArray(), plan.PixelsPerMm);
+        return PngMetadata.WithPhysicalScale(encoded.ToArray(), pixelsPerMm);
     }
 
     private static SKColor ToSKColor(Rgb rgb)

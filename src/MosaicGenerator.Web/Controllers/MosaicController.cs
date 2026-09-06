@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
 using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Imaging;
+using MosaicGenerator.Core.Material;
 using MosaicGenerator.Core.Pipeline;
 using MosaicGenerator.Core.Validation;
 using MosaicGenerator.Web.Models;
@@ -117,7 +118,8 @@ public sealed class MosaicController(
         }
 
         string id = results.Save(
-            Describe(result, form, palette, choice, sourceId), result.CartoonPng, result.SchemePng);
+            Describe(result, form, palette, choice, sourceId),
+            result.CartoonPng, result.SchemePng, result.LegendPng);
 
         logger.LogInformation(
             "Generated {Columns}x{Rows} pieces of {Along}x{Across} mm from {Palette}, " +
@@ -184,6 +186,10 @@ public sealed class MosaicController(
     [HttpGet("result/{id}/scheme.png")]
     public IActionResult Scheme(string id, bool download = false) =>
         Image(id, ResultImage.Scheme, download, "shema.png");
+
+    [HttpGet("result/{id}/legend.png")]
+    public IActionResult Legend(string id, bool download = false) =>
+        Image(id, ResultImage.Legend, download, "legenda.png");
 
     private IActionResult Image(string id, ResultImage image, bool download, string fileName)
     {
@@ -253,7 +259,7 @@ public sealed class MosaicController(
         ColorsBeforeReduction = result.ColorsBeforeReduction,
         ModulesReassigned = result.ModulesReassigned,
         CartoonWidthPx = result.Cartoon.PixelWidth,
-        CartoonHeightPx = result.Cartoon.PixelHeight,
+        CartoonHeightPx = result.CartoonSheetHeightPx,
         CartoonDpi = result.Cartoon.Dpi,
         SchemeWidthPx = result.Scheme.PixelWidth,
         SchemeHeightPx = result.Scheme.PixelHeight,

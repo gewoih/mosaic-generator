@@ -176,6 +176,7 @@ internal static class Program
 
             File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-cartoon.png"), result.CartoonPng);
             File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-scheme.png"), result.SchemePng);
+            File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-legend.png"), result.LegendPng);
 
             // Recomputed rather than plumbed out of the service: every step is deterministic, so
             // this is the same layout the PNGs were drawn from.

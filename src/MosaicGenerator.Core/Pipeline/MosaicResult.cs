@@ -11,6 +11,9 @@ public sealed record MosaicResult
 
     public required byte[] SchemePng { get; init; }
 
+    /// <summary>Legend sheet — swatch, number, code and count per article — printed separately.</summary>
+    public required byte[] LegendPng { get; init; }
+
     public required MaterialReport Report { get; init; }
 
     public required MosaicLayout Layout { get; init; }
@@ -18,6 +21,9 @@ public sealed record MosaicResult
     public required Palette Palette { get; init; }
 
     public required RenderPlan Cartoon { get; init; }
+
+    /// <summary>Height of the cartoon PNG — the panel raster plus the scale-bar strip beneath it.</summary>
+    public required int CartoonSheetHeightPx { get; init; }
 
     public required RenderPlan Scheme { get; init; }
 

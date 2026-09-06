@@ -2,7 +2,7 @@ namespace MosaicGenerator.Web.Services;
 
 public interface IResultStore
 {
-    string Save(StoredResult result, byte[] cartoonPng, byte[] schemePng);
+    string Save(StoredResult result, byte[] cartoonPng, byte[] schemePng, byte[] legendPng);
 
     StoredResult? Find(string id);
 
@@ -13,4 +13,5 @@ public enum ResultImage
 {
     Cartoon,
     Scheme,
+    Legend,
 }

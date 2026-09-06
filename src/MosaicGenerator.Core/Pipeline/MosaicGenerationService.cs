@@ -129,6 +129,8 @@ public sealed class MosaicGenerationService(
         {
             CartoonPng = _renderer.RenderCartoon(cartoon),
             SchemePng = _renderer.RenderScheme(scheme, report),
+            LegendPng = _renderer.RenderLegend(report),
+            CartoonSheetHeightPx = CartoonSheet.Layout(cartoon).HeightPx,
             Report = report,
             Layout = layout,
             Palette = palette,

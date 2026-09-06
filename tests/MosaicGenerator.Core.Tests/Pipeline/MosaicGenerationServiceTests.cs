@@ -37,11 +37,17 @@ public class MosaicGenerationServiceTests
         using SKBitmap? scheme = SKBitmap.Decode(result.SchemePng);
         Assert.NotNull(cartoon);
         Assert.NotNull(scheme);
+        // The cartoon PNG is the panel raster plus the scale-bar strip beneath it.
         Assert.Equal(result.Cartoon.PixelWidth, cartoon!.Width);
+        Assert.Equal(result.CartoonSheetHeightPx, cartoon.Height);
+        Assert.True(cartoon.Height > result.Cartoon.PixelHeight);
         Assert.Equal(result.Scheme.PixelWidth, scheme!.Width);
 
         // The cartoon is rendered at twice the scheme's pixels per step — it prints 1:1.
         Assert.True(cartoon.Width > scheme.Width);
+
+        using SKBitmap? legend = SKBitmap.Decode(result.LegendPng);
+        Assert.NotNull(legend);
     }
 
     [Fact]
