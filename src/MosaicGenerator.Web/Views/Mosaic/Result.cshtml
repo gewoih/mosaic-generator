@@ -54,17 +54,6 @@
             </p>
         }
 
-        <details class="summary-details">
-            <summary>Подробности</summary>
-            <dl>
-                <div><dt>Короткая сторона</dt><dd>@stored.ActualAcross кусков</dd></div>
-                <div><dt>Поля</dt><dd>@stored.MarginXMm.ToString("0.#", ru) мм по бокам, @stored.MarginYMm.ToString("0.#", ru) мм сверху и снизу</dd></div>
-                <div><dt>Палитра</dt><dd>@stored.PaletteName@(reduced ? $", {stored.Lines.Count} из {stored.ColorsBeforeReduction} подобранных" : $", {stored.Lines.Count} цв.")</dd></div>
-                <div><dt>Запас на отходы</dt><dd>@stored.WastePercent.ToString("0.#", ru) %</dd></div>
-                <div><dt>Цена материала</dt><dd>@stored.PricePerKgRub.ToString("N0", ru) ₽/кг</dd></div>
-            </dl>
-        </details>
-
         <div class="tabs" data-tabs>
             <div class="tabs__list" role="tablist" aria-label="Выходные листы">
                 <button type="button" class="tabs__tab" role="tab" data-tab="cartoon" aria-selected="true">Картон</button>
@@ -78,10 +67,6 @@
                     <span class="dims">@stored.CartoonWidthPx × @stored.CartoonHeightPx px · @stored.CartoonDpi.ToString("0", ru) dpi</span>
                     <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })">Скачать PNG</a>
                 </div>
-                <p class="tabpanel__note">
-                    В PNG записан физический масштаб: печать «100 %» выходит в реальный размер,
-                    сверьтесь по линейке 100 мм под картоном. Шов не затирается и нарисован прямо на картоне.
-                </p>
             </div>
 
             <div class="tabpanel" role="tabpanel" data-panel="legend" hidden>
@@ -107,10 +92,6 @@
 
 <section class="consumption">
     <h2>Расход материала</h2>
-    <p>
-        Отметьте «Держать» у оттенков, которые нельзя сворачивать (блик, клюв): по числу
-        модулей они уходят первыми. Отметки применяются кнопкой «Пересобрать макет».
-    </p>
     <div class="table-scroll">
         <table>
             <thead>
@@ -159,8 +140,6 @@
         </table>
     </div>
 </section>
-
-<a class="link-back" asp-action="Index">← Начать с другой фотографии</a>
 
 @section Scripts {
     <script type="application/json" data-layout-data>@Html.Raw(Model.Parameters.LayoutDataJson)</script>
