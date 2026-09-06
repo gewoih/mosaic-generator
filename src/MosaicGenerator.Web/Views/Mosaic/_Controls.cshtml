@@ -1,0 +1,83 @@
+@model ParametersViewModel
+@*
+    Средняя часть рельсы: три контрола, которые мастер крутит на каждой пересборке
+    (размер панно, откус, максимум цветов), плюс свёрнутый блок «Материал» для того,
+    что задаётся один раз. Фото и кроп — на самих страницах: у Index файловый вход,
+    у Result — свёрнутая рамка.
+*@
+
+<fieldset class="rail__section">
+    <span class="rail__head">Панно</span>
+    <div class="field-row">
+        <label class="field">
+            <span class="field__label">Ширина, см</span>
+            <input name="PanelWidthCm" type="number" step="1" min="10" max="300"
+                   value="@Model.Form.PanelWidthCm.ToString(CultureInfo.InvariantCulture)" data-panel="width" />
+        </label>
+        <label class="field">
+            <span class="field__label">Высота, см</span>
+            <input name="PanelHeightCm" type="number" step="1" min="10" max="300"
+                   value="@Model.Form.PanelHeightCm.ToString(CultureInfo.InvariantCulture)" data-panel="height" />
+        </label>
+    </div>
+    <output class="readout" data-readout hidden></output>
+</fieldset>
+
+<hr />
+
+<fieldset class="rail__section">
+    <span class="rail__head">Откус</span>
+    <div class="chips">
+        @foreach (double module in ModuleSelector.AvailableModulesMm)
+        {
+            <label class="chip-option">
+                <input type="radio" name="ModuleAlongMm" value="@module.ToString(CultureInfo.InvariantCulture)"
+                       data-detail data-remember
+                       checked="@(Model.Form.ModuleAlongMm.Equals(module))" />
+                <span>@module.ToString("0.#", CultureInfo.InvariantCulture) мм</span>
+            </label>
+        }
+    </div>
+    <span class="field__hint">Минимальная длина куска вдоль курса — пол, а не фиксированный размер.</span>
+</fieldset>
+
+<hr />
+
+<fieldset class="rail__section">
+    <span class="rail__head">Цвета</span>
+    <label class="field">
+        <span class="field__label">Максимум цветов</span>
+        <input name="MaxColors" type="number" step="1" min="2" max="100"
+               value="@Model.Form.MaxColors.ToString(CultureInfo.InvariantCulture)" data-remember />
+        <span class="field__hint">Первым уходит оттенок с самой дешёвой заменой, а не самый редкий.</span>
+    </label>
+</fieldset>
+
+<details class="disclosure" data-remember-open="material">
+    <summary>Материал</summary>
+    <div class="disclosure__body">
+        <label class="field">
+            <span class="field__label">Палитра</span>
+            <select name="PaletteId" data-remember>
+                @foreach (Palette palette in Model.Palettes)
+                {
+                    <option value="@palette.Id" selected="@(Model.Form.PaletteId == palette.Id)">
+                        @palette.Name (@palette.Colors.Count цв.)
+                    </option>
+                }
+            </select>
+        </label>
+        <label class="field">
+            <span class="field__label">Цена материала, ₽/кг</span>
+            <input name="PricePerKgRub" type="number" step="10" min="0" max="1000000"
+                   value="@Model.Form.PricePerKgRub.ToString(CultureInfo.InvariantCulture)" data-remember />
+            <span class="field__hint">Средняя ставка поставщика по линейке. Смета оценочная.</span>
+        </label>
+        <label class="field">
+            <span class="field__label">Запас на отходы, %</span>
+            <input name="WastePercent" type="number" step="1" min="0" max="100"
+                   value="@Model.Form.WastePercent.ToString(CultureInfo.InvariantCulture)" data-remember />
+            <span class="field__hint">Покрывает рез, бой и брак при наборе.</span>
+        </label>
+    </div>
+</details>

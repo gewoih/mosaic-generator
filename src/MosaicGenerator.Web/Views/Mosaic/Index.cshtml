@@ -3,32 +3,41 @@
     ViewData["Title"] = "Параметры";
 }
 
-<form class="panel" asp-action="Generate" method="post" enctype="multipart/form-data" data-layout-form>
-    @Html.AntiForgeryToken()
+<div class="workbench workbench--form">
+    <form class="rail" asp-action="Generate" method="post" enctype="multipart/form-data"
+          data-layout-form data-remember-form>
+        @Html.AntiForgeryToken()
 
-    <div asp-validation-summary="All" class="errors"></div>
+        <div asp-validation-summary="All" class="errors"></div>
 
-    <fieldset class="field-group">
-        <legend>Исходник</legend>
-        <label class="field field--wide">
-            <span class="field__label">Фотография</span>
-            <input type="file" name="Photo" accept="image/jpeg,image/png,image/webp" data-photo
-                   required="@(string.IsNullOrEmpty(Model.Form.SourceId))" />
-            <span class="field__hint">JPEG, PNG или WebP, до @Model.MaxUploadMegabytes МБ.</span>
-        </label>
-        <input type="hidden" name="SourceId" value="@Model.Form.SourceId" />
-        <div class="field field--wide">
+        <fieldset class="rail__section">
+            <span class="rail__head">Исходник</span>
+            <label class="field">
+                <span class="field__label">Фотография</span>
+                <input type="file" name="Photo" accept="image/jpeg,image/png,image/webp" data-photo
+                       required="@(string.IsNullOrEmpty(Model.Form.SourceId))" />
+                <span class="field__hint">JPEG, PNG или WebP, до @Model.MaxUploadMegabytes МБ.</span>
+            </label>
+            <input type="hidden" name="SourceId" value="@Model.Form.SourceId" />
             @await Html.PartialAsync("_Cropper", Model.Parameters)
-        </div>
-    </fieldset>
+        </fieldset>
 
-    @await Html.PartialAsync("_Parameters", Model.Parameters)
+        <hr />
 
-    <button class="button" type="submit">Сгенерировать</button>
-</form>
+        @await Html.PartialAsync("_Controls", Model.Parameters)
+
+        <button class="button button--block" type="submit">Сгенерировать</button>
+    </form>
+
+    <div class="stage stage--empty">
+        <p><strong>Здесь появится картон.</strong></p>
+        <p>Загрузите фотографию, наведите рамку и задайте размер панно.</p>
+    </div>
+</div>
 
 @section Scripts {
     <script type="application/json" data-layout-data>@Html.Raw(Model.Parameters.LayoutDataJson)</script>
     <script src="~/js/layout.js" asp-append-version="true"></script>
     <script src="~/js/crop.js" asp-append-version="true"></script>
+    <script src="~/js/ui.js" asp-append-version="true"></script>
 }

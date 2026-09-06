@@ -5,153 +5,166 @@
     string id = Model.Id;
     CultureInfo ru = CultureInfo.GetCultureInfo("ru-RU");
     var pinned = new HashSet<string>(stored.PinnedArticles, StringComparer.OrdinalIgnoreCase);
+    bool reduced = stored.ColorsBeforeReduction > stored.Lines.Count;
 }
 
-<section class="summary">
-    <dl>
-        <div><dt>Панно</dt><dd>@((stored.PanelWidthMm / 10).ToString("0.#", ru)) × @((stored.PanelHeightMm / 10).ToString("0.#", ru)) см</dd></div>
-        <div><dt>Сетка</dt><dd>@stored.Columns × @stored.Rows = @stored.TotalModules.ToString("N0", ru) модулей, @stored.ActualAcross по короткой стороне</dd></div>
-        <div><dt>Модуль / шов</dt><dd>@stored.ModuleSizeMm.ToString("0.#", ru) мм / @stored.GroutWidthMm.ToString("0.#", ru) мм</dd></div>
-        <div><dt>Поля</dt><dd>@stored.MarginXMm.ToString("0.#", ru) мм по бокам, @stored.MarginYMm.ToString("0.#", ru) мм сверху и снизу</dd></div>
-        <div>
-            <dt>Палитра</dt>
-            <dd>
-                @stored.PaletteName, @stored.Lines.Count цв.
-                @if (stored.ColorsBeforeReduction > stored.Lines.Count)
-                {
-                    <text>из @stored.ColorsBeforeReduction подобранных</text>
-                }
-            </dd>
+<div class="workbench">
+    <form class="rail" id="regenerate" asp-action="Regenerate" method="post"
+          enctype="multipart/form-data" data-layout-form>
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="All" class="errors"></div>
+        <input type="hidden" name="SourceId" value="@stored.SourceId" />
+
+        <details class="crop-fold">
+            <summary>Кадр</summary>
+            <div class="crop-fold__body">
+                @await Html.PartialAsync("_Cropper", Model.Parameters)
+            </div>
+        </details>
+
+        <hr />
+
+        @await Html.PartialAsync("_Controls", Model.Parameters)
+
+        <button class="button button--block" type="submit">Пересобрать макет</button>
+    </form>
+
+    <div class="stage">
+        <div class="summary-line">
+            <b>@((stored.PanelWidthMm / 10).ToString("0.#", ru)) × @((stored.PanelHeightMm / 10).ToString("0.#", ru)) см</b>
+            <span>·</span>
+            <b>@stored.Columns × @stored.Rows</b> = @stored.TotalModules.ToString("N0", ru) модулей
+            <span>·</span>
+            откус @stored.ModuleSizeMm.ToString("0.#", ru) / шов @stored.GroutWidthMm.ToString("0.#", ru) мм
+            <span>·</span>
+            @stored.Lines.Count цв.
         </div>
-        <div><dt>Запас</dt><dd>@stored.WastePercent.ToString("0.#", ru) %</dd></div>
-        <div><dt>Цена материала</dt><dd>@stored.PricePerKgRub.ToString("N0", ru) ₽/кг</dd></div>
-    </dl>
-    @if (stored.StoppedAtPinnedColors)
-    {
-        <p class="summary__warning">
-            Закреплённых артикулов больше, чем лимит цветов: лимит уступил закреплению.
-        </p>
-    }
-    @if (stored.ColorsBeforeReduction > stored.Lines.Count)
-    {
-        double share = (double)stored.ModulesReassigned / stored.TotalModules * 100;
-        <p class="summary__note">
-            Свёрнуто @(stored.ColorsBeforeReduction - stored.Lines.Count) оттенков при лимите
-            @stored.MaxColors: переназначено @stored.ModulesReassigned из @stored.TotalModules.ToString("N0", ru)
-            модулей (@share.ToString("0.#", ru) %).
-        </p>
-    }
-    <p class="summary__note">
-        Артикулы подобраны по цвету самой смальты; шов не затирается и нарисован прямо на картоне.
-        В картинки записан физический масштаб, поэтому печать «100 %» выходит в реальный размер —
-        сверьтесь по линейке 100 мм под картоном. Легенда с плашками и числом кусков — отдельным
-        листом, чтобы не отнимать место у поля мозаики.
-    </p>
-</section>
 
-<form class="panel" id="regenerate" asp-action="Regenerate" method="post"
-      enctype="multipart/form-data" data-layout-form>
-    @Html.AntiForgeryToken()
-    <div asp-validation-summary="All" class="errors"></div>
-    <input type="hidden" name="SourceId" value="@stored.SourceId" />
+        @if (stored.StoppedAtPinnedColors)
+        {
+            <p class="callout">Закреплённых артикулов больше лимита цветов — лимит уступил закреплению.</p>
+        }
+        @if (reduced)
+        {
+            double share = (double)stored.ModulesReassigned / stored.TotalModules * 100;
+            <p class="callout">
+                Свёрнуто @(stored.ColorsBeforeReduction - stored.Lines.Count) оттенков при лимите
+                @stored.MaxColors: переназначено @stored.ModulesReassigned из
+                @stored.TotalModules.ToString("N0", ru) модулей (@share.ToString("0.#", ru) %).
+            </p>
+        }
 
-    <fieldset class="field-group">
-        <legend>Кадр</legend>
-        <div class="field field--wide">
-            @await Html.PartialAsync("_Cropper", Model.Parameters)
+        <details class="summary-details">
+            <summary>Подробности</summary>
+            <dl>
+                <div><dt>Короткая сторона</dt><dd>@stored.ActualAcross кусков</dd></div>
+                <div><dt>Поля</dt><dd>@stored.MarginXMm.ToString("0.#", ru) мм по бокам, @stored.MarginYMm.ToString("0.#", ru) мм сверху и снизу</dd></div>
+                <div><dt>Палитра</dt><dd>@stored.PaletteName@(reduced ? $", {stored.Lines.Count} из {stored.ColorsBeforeReduction} подобранных" : $", {stored.Lines.Count} цв.")</dd></div>
+                <div><dt>Запас на отходы</dt><dd>@stored.WastePercent.ToString("0.#", ru) %</dd></div>
+                <div><dt>Цена материала</dt><dd>@stored.PricePerKgRub.ToString("N0", ru) ₽/кг</dd></div>
+            </dl>
+        </details>
+
+        <div class="tabs" data-tabs>
+            <div class="tabs__list" role="tablist" aria-label="Выходные листы">
+                <button type="button" class="tabs__tab" role="tab" data-tab="cartoon" aria-selected="true">Картон</button>
+                <button type="button" class="tabs__tab" role="tab" data-tab="legend" aria-selected="false">Легенда</button>
+                <button type="button" class="tabs__tab" role="tab" data-tab="scheme" aria-selected="false">Схема</button>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" data-panel="cartoon">
+                <img src="@Url.Action("Cartoon", new { id })" alt="Картон под набор" />
+                <div class="tabpanel__bar">
+                    <span class="dims">@stored.CartoonWidthPx × @stored.CartoonHeightPx px · @stored.CartoonDpi.ToString("0", ru) dpi</span>
+                    <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })">Скачать PNG</a>
+                </div>
+                <p class="tabpanel__note">
+                    В PNG записан физический масштаб: печать «100 %» выходит в реальный размер,
+                    сверьтесь по линейке 100 мм под картоном. Шов не затирается и нарисован прямо на картоне.
+                </p>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" data-panel="legend" hidden>
+                <img src="@Url.Action("Legend", new { id })" alt="Легенда: плашки, коды, число кусков" />
+                <div class="tabpanel__bar">
+                    <span class="dims">плашка · номер · артикул · число кусков</span>
+                    <a class="button button--small" href="@Url.Action("Legend", new { id, download = true })">Скачать PNG</a>
+                </div>
+                <p class="tabpanel__note">Печатать отдельным листом, чтобы не отнимать место у поля мозаики.</p>
+            </div>
+
+            <div class="tabpanel" role="tabpanel" data-panel="scheme" hidden>
+                <img src="@Url.Action("Scheme", new { id })" alt="Схема для разбора раскладки" />
+                <div class="tabpanel__bar">
+                    <span class="dims">@stored.SchemeWidthPx × @stored.SchemeHeightPx px · @stored.SchemeDpi.ToString("0", ru) dpi</span>
+                    <a class="button button--small" href="@Url.Action("Scheme", new { id, download = true })">Скачать PNG</a>
+                </div>
+                <p class="tabpanel__note">Пронумерованная раскладка — для разбора алгоритма, не для набора.</p>
+            </div>
         </div>
-    </fieldset>
-
-    @await Html.PartialAsync("_Parameters", Model.Parameters)
-
-    <button class="button" type="submit">Пересобрать макет</button>
-</form>
-
-<section class="outputs">
-    <figure>
-        <img src="@Url.Action("Cartoon", new { id })" alt="Картон под набор" />
-        <figcaption>
-            <strong>Картон под набор</strong>
-            <span>@stored.CartoonWidthPx × @stored.CartoonHeightPx px, @stored.CartoonDpi.ToString("0", ru) dpi</span>
-            <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })">Скачать PNG</a>
-        </figcaption>
-    </figure>
-    <figure>
-        <img src="@Url.Action("Legend", new { id })" alt="Легенда: плашки, коды, число кусков" />
-        <figcaption>
-            <strong>Легенда (печатать отдельным листом)</strong>
-            <span>плашка, номер, артикул и число кусков по каждому оттенку</span>
-            <a class="button button--small" href="@Url.Action("Legend", new { id, download = true })">Скачать PNG</a>
-        </figcaption>
-    </figure>
-    <figure>
-        <img src="@Url.Action("Scheme", new { id })" alt="Схема для разбора раскладки" />
-        <figcaption>
-            <strong>Схема (для разбора раскладки)</strong>
-            <span>@stored.SchemeWidthPx × @stored.SchemeHeightPx px, @stored.SchemeDpi.ToString("0", ru) dpi</span>
-            <a class="button button--small" href="@Url.Action("Scheme", new { id, download = true })">Скачать PNG</a>
-        </figcaption>
-    </figure>
-</section>
+    </div>
+</div>
 
 <section class="consumption">
     <h2>Расход материала</h2>
-    <p class="summary__note">
-        Отметьте оттенки, которые нельзя сворачивать: несколько тессер на блик или клюв держат
-        весь сюжет, а по числу модулей они уходят первыми. Отметки применяются кнопкой
-        «Пересобрать макет».
+    <p>
+        Отметьте «Держать» у оттенков, которые нельзя сворачивать (блик, клюв): по числу
+        модулей они уходят первыми. Отметки применяются кнопкой «Пересобрать макет».
     </p>
-    <table>
-        <thead>
-        <tr>
-            <th>Код</th>
-            <th title="Не сворачивать этот артикул">Держать</th>
-            <th>Артикул</th>
-            <th>Название</th>
-            <th class="numeric">Модулей</th>
-            <th class="numeric">Площадь с запасом, м²</th>
-            <th class="numeric">Масса, кг</th>
-            <th class="numeric">Стоимость, ₽</th>
-        </tr>
-        </thead>
-        <tbody>
-        @foreach (StoredMaterialLine line in stored.Lines)
-        {
+    <div class="table-scroll">
+        <table>
+            <thead>
             <tr>
-                <td class="code">@line.Code</td>
-                <td class="code">
-                    <input type="checkbox" form="regenerate" name="PinnedArticles" value="@line.Article"
-                           checked="@pinned.Contains(line.Article)"
-                           aria-label="Не сворачивать @line.Article" />
-                </td>
-                <td class="mono">@line.Article</td>
-                <td>
-                    <span class="chip" style="background:@line.Hex"></span>
-                    @line.Name
-                </td>
-                <td class="numeric">@line.ModuleCount.ToString("N0", ru)</td>
-                <td class="numeric">@line.GrossAreaM2.ToString("N3", ru)</td>
-                <td class="numeric">@line.MassKg.ToString("N2", ru)</td>
-                <td class="numeric">@line.Cost.ToString("N0", ru)</td>
+                <th>Код</th>
+                <th title="Не сворачивать этот артикул">Держать</th>
+                <th>Артикул</th>
+                <th>Название</th>
+                <th class="numeric">Модулей</th>
+                <th class="numeric">Площадь с запасом, м²</th>
+                <th class="numeric">Масса, кг</th>
+                <th class="numeric">Стоимость, ₽</th>
             </tr>
-        }
-        </tbody>
-        <tfoot>
-        <tr>
-            <td colspan="4">Итого</td>
-            <td class="numeric">@stored.TotalModules.ToString("N0", ru)</td>
-            <td class="numeric">@stored.TotalGrossAreaM2.ToString("N3", ru)</td>
-            <td class="numeric">@stored.TotalMassKg.ToString("N2", ru)</td>
-            <td class="numeric">@stored.TotalCost.ToString("N0", ru)</td>
-        </tr>
-        </tfoot>
-    </table>
+            </thead>
+            <tbody>
+            @foreach (StoredMaterialLine line in stored.Lines)
+            {
+                <tr>
+                    <td class="code">@line.Code</td>
+                    <td class="hold">
+                        <input type="checkbox" form="regenerate" name="PinnedArticles" value="@line.Article"
+                               checked="@pinned.Contains(line.Article)"
+                               aria-label="Не сворачивать @line.Article" />
+                    </td>
+                    <td class="mono">@line.Article</td>
+                    <td>
+                        <span class="dot" style="background:@line.Hex"></span>
+                        @line.Name
+                    </td>
+                    <td class="numeric">@line.ModuleCount.ToString("N0", ru)</td>
+                    <td class="numeric">@line.GrossAreaM2.ToString("N3", ru)</td>
+                    <td class="numeric">@line.MassKg.ToString("N2", ru)</td>
+                    <td class="numeric">@line.Cost.ToString("N0", ru)</td>
+                </tr>
+            }
+            </tbody>
+            <tfoot>
+            <tr>
+                <td colspan="4">Итого</td>
+                <td class="numeric">@stored.TotalModules.ToString("N0", ru)</td>
+                <td class="numeric">@stored.TotalGrossAreaM2.ToString("N3", ru)</td>
+                <td class="numeric">@stored.TotalMassKg.ToString("N2", ru)</td>
+                <td class="numeric">@stored.TotalCost.ToString("N0", ru)</td>
+            </tr>
+            </tfoot>
+        </table>
+    </div>
 </section>
 
-<a class="button" asp-action="Index">Начать с другой фотографии</a>
+<a class="link-back" asp-action="Index">← Начать с другой фотографии</a>
 
 @section Scripts {
     <script type="application/json" data-layout-data>@Html.Raw(Model.Parameters.LayoutDataJson)</script>
     <script src="~/js/layout.js" asp-append-version="true"></script>
     <script src="~/js/crop.js" asp-append-version="true"></script>
+    <script src="~/js/ui.js" asp-append-version="true"></script>
 }
