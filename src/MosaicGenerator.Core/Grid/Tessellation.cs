@@ -480,6 +480,13 @@ public static class Tessellation
                 PointD[] cell = OrientedRectPolygon(
                     centre.X, centre.Y, tangent.X, tangent.Y, boundAlong, boundAcross, boundAcross);
 
+                // One seam line per neighbouring course, not one per neighbouring piece. Every piece
+                // of that course would otherwise contribute a slightly different line — each leans on
+                // its own tangent — and the intersection of a dozen near-parallel half-planes nibbles
+                // the piece down to nothing much. Measured: bare patches of two thirds of a module.
+                // The closest piece of a course is the one that decides where its line runs.
+                var seams = new SortedDictionary<(int Course, int Side), (double Span, double Nx, double Ny, double Distance)>();
+
                 int cx = (int)Math.Floor(centre.X / reach);
                 int cy = (int)Math.Floor(centre.Y / reach);
                 for (int gx = cx - 1; gx <= cx + 1; gx++)
@@ -504,21 +511,44 @@ public static class Tessellation
                             double across = (dx * -tangent.Y) + (dy * tangent.X);
                             double span = Math.Sqrt((dx * dx) + (dy * dy));
 
-                            // A neighbouring course is cut off by a straight line running along this
-                            // course, not by the bisector between two staggered pieces: the mosaicist
-                            // runs a line and knaps to it, which is why smalt comes out four-sided.
-                            // Bisecting instead turned a staggered field into a honeycomb.
-                            cell = !SameRun(all[j].CourseId, courseId) && Math.Abs(across) > span * 0.6
-                                ? FieldGeometry.ClipToLine(
-                                    cell, centre,
-                                    Math.Sign(across) * -tangent.Y, Math.Sign(across) * tangent.X,
-                                    (Math.Abs(across) / 2.0) - joint)
-                                : FieldGeometry.ClipToBisector(cell, centre, other, joint);
-                            if (cell.Length < 3)
+                            // A neighbouring course is cut off by a straight line along the seam, not
+                            // by the bisector between two staggered pieces: the mosaicist runs a line
+                            // and knaps to it, which is why smalt comes out four-sided. Bisecting
+                            // instead turned a staggered field into a honeycomb.
+                            if (!SameRun(all[j].CourseId, courseId) && Math.Abs(across) > span * 0.6)
                             {
-                                break;
+                                // A filler belongs to no course, so it gets a key of its own rather
+                                // than sharing one with every other filler on the panel.
+                                var key = (
+                                    all[j].CourseId >= 0 ? all[j].CourseId : -2 - j,
+                                    Math.Sign(across));
+                                (double nx, double ny, double offset) =
+                                    SeamCut(centre, tangent, other, all[j].Tangent, joint);
+                                if (!seams.TryGetValue(key, out (double Span, double, double, double) held)
+                                    || span < held.Span)
+                                {
+                                    seams[key] = (span, nx, ny, offset);
+                                }
+                            }
+                            else
+                            {
+                                cell = FieldGeometry.ClipToBisector(cell, centre, other, joint);
+                                if (cell.Length < 3)
+                                {
+                                    break;
+                                }
                             }
                         }
+                    }
+                }
+
+                // Sorted by course, so the order the half-planes are applied in repeats exactly.
+                foreach ((double _, double nx, double ny, double offset) in seams.Values)
+                {
+                    cell = FieldGeometry.ClipToLine(cell, centre, nx, ny, offset);
+                    if (cell.Length < 3)
+                    {
+                        break;
                     }
                 }
 
@@ -1288,6 +1318,78 @@ public static class Tessellation
         }
 
         return best;
+    }
+
+    /// <summary>
+    /// The line two pieces from different courses are knapped to where their courses meet, as a unit
+    /// normal pointing from <paramref name="here"/> towards <paramref name="there"/> and the distance
+    /// to step along it.
+    ///
+    /// The point is that both sides get the <em>same</em> line. Cutting each piece square across its
+    /// own course is what a mosaicist does in the middle of a run, but at a seam the two courses sit
+    /// at an angle, so two such cuts are two lines at that angle: they touch where the courses are
+    /// closest and open a wedge of adhesive everywhere else. That wedge is the "hole" of TODO п. 4 —
+    /// on a flat photograph, where the courses stay parallel, there are none and the joint comes out
+    /// at its nominal width, and the more the layout bends the more of the panel is wedge. Here the
+    /// cut leans on the bisector of the two tangents instead, which both sides compute alike, so the
+    /// two cut edges are parallel and the joint holds one width along the whole seam. See
+    /// <c>docs/dyry-kliny-plan.md</c>.
+    ///
+    /// A course has no inherent direction — the streamline could as well have been integrated the
+    /// other way — so an opposed tangent is turned round before the bisector is taken.
+    /// </summary>
+    /// <summary>
+    /// The furthest a seam line may lean off a piece's own course. Swept over 0°, 3°, 6°, 9°, 12°,
+    /// 20° and 30° on <c>sunset</c>, <c>human</c> and <c>gull</c> at two sizes: the joint keeps
+    /// shrinking up to about 6°, but the piece pays for it in shape — past 3° the four-sided share
+    /// falls away and beyond 12° the narrow side collapses (4,5 → 2,4 mm at the full half angle).
+    /// 3° takes nearly all of the gain and costs neither. See <c>docs/dyry-kliny-plan.md</c>.
+    /// </summary>
+    private const double MaxSeamLean = 3.0 * Math.PI / 180.0;
+
+    internal static (double Nx, double Ny, double Distance) SeamCut(
+        PointD here, PointD hereTangent, PointD there, PointD thereTangent, double joint)
+    {
+        double tx = thereTangent.X;
+        double ty = thereTangent.Y;
+        if ((hereTangent.X * tx) + (hereTangent.Y * ty) < 0.0)
+        {
+            tx = -tx;
+            ty = -ty;
+        }
+
+        // Half the angle between the courses — but only so far. A neighbour whose course crosses
+        // this one steeply is not a seam to share a line with: that course is ending against this
+        // one, and the mosaicist cuts such a piece square, as this did before. Leaning the full half
+        // angle there skews the piece into a wedge no one could knap — measured on the first cut of
+        // this change, the narrow side went from 4,5 to 2,4 mm. So the lean is capped.
+        double lean = Math.Atan2(
+            (hereTangent.X * ty) - (hereTangent.Y * tx),
+            (hereTangent.X * tx) + (hereTangent.Y * ty)) / 2.0;
+        lean = Math.Clamp(lean, -MaxSeamLean, MaxSeamLean);
+
+        double cos = Math.Cos(lean);
+        double sin = Math.Sin(lean);
+        double bx = (hereTangent.X * cos) - (hereTangent.Y * sin);
+        double by = (hereTangent.X * sin) + (hereTangent.Y * cos);
+        double length = Math.Sqrt((bx * bx) + (by * by));
+        bx /= length;
+        by /= length;
+
+        // Normal to the seam, turned to point at the neighbour.
+        double nx = -by;
+        double ny = bx;
+        double gap = ((there.X - here.X) * nx) + ((there.Y - here.Y) * ny);
+        if (gap < 0.0)
+        {
+            nx = -nx;
+            ny = -ny;
+            gap = -gap;
+        }
+
+        // Half the spacing measured across the seam, less the joint. The neighbour steps back by the
+        // same amount from its own side, so what is left between the two pieces is one grout.
+        return (nx, ny, (gap / 2.0) - joint);
     }
 
     /// <summary>The bounded shape a cell starts from, before its neighbours cut it down.</summary>

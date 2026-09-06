@@ -58,6 +58,10 @@ internal static class Program
         // the placer log every attempt.
         bool autopsy = args.Contains("--why");
 
+        // Where the wide gaps sit, drawn (TODO п. 4). The numbers say how much and how wide; this
+        // says what shape the defect has on the work.
+        bool holes = args.Contains("--holes");
+
         if (photo is null || !File.Exists(photo))
         {
             Console.Error.WriteLine(
@@ -341,6 +345,12 @@ internal static class Program
             if (autopsy)
             {
                 CourseAutopsy.Report(layout, tesserae, field, contours);
+            }
+
+            if (holes)
+            {
+                HoleMap.Write(
+                    Path.Combine(outDir, $"{run.Name}-holes.png"), layout, tesserae, 3.0);
             }
 
             CoverageMask mask = CoverageMask.Rasterise(layout, tesserae);
