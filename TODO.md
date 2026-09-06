@@ -158,6 +158,27 @@ A4 одиночки 0,7 → 0,1 %; сиреневые одиночки в вод
 
 ---
 
+## 18. Авто-подбор числа цветов + лесенка картонов на лету (в работе)
+
+**Задача.** Мастер подбирает число цветов вручную полной перегенерацией: у процента
+переназначения из строки редукции есть эмпирический смысл (5–7 % — сюжет цел, >10–15 % —
+сыпется), но проверять каждую пробу дорого. Автоматизировать выбор и дать менять его на лету.
+
+**Решение** (`docs/avto-podbor-cvetov-plan.md`). `PaletteReducer.BuildLadder` — вся лесенка
+стоимости за один вложенный проход; `ReductionLadder.Knee` ищет излом предельной стоимости
+сброса (`KneeFactor = 3.5`, консервативно, калибруется позже по `samples/`). `Generate`
+считает префикс пайплайна один раз, печёт картоны + расход для диапазона авто ±5; веб держит
+стрелки ◄► над картоном — мгновенная подмена в печёном диапазоне, «пересчитать» за его
+пределами. Стенд: колонки `autoColors` / `kneeRatio` в `metrics.csv`.
+
+**Где в коде.** `Core/Quantization/ReductionLadder.cs` (новый), `Core/Quantization/PaletteReducer.cs`,
+`Core/Pipeline/MosaicGenerationService.cs`, `Core/Pipeline/MosaicResult.cs`,
+`Web/Services/TempResultStore.cs` + `StoredResult.cs`, `Web/Controllers/MosaicController.cs`,
+`Web/Views/Mosaic/Result.cshtml` + `_Controls.cshtml`, `Web/wwwroot/js/ui.js`,
+`tools/MosaicGenerator.Diag/Program.cs` + `Metrics.cs`.
+
+---
+
 ## 17. Легенда налезает сама на себя при части палитр
 
 **Проблема.** На листе легенды строки с 5–6 позиции печатаются одна поверх другой
