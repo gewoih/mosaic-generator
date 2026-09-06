@@ -148,7 +148,7 @@ internal static class Program
             "areaMin", "areaP5", "areaMed", "areaP95", "areaMax", "tiny", "sliver", "manySided",
             "v4", "v5", "v6", "v7plus", "concave", "selfHit",
             "jointP50", "jointP90", "jointMax", "wideJoint", "jointArea",
-            "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "uncuttable", "awkward", "structureOff", "edgesCrossed",
+            "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "minWidthP5", "minWidthP1", "narrowWidth", "uncuttable", "awkward", "structureOff", "edgesCrossed",
             "dE_mean", "dE_p95", "dE_max", "colorsBefore", "colorsUsed", "rare", "dominant",
             "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "midIsland", "dL_med", "hueDrift",
             "reassigned", "ms"));
@@ -374,7 +374,8 @@ internal static class Program
                 N(shape.KinkShare),
                 shape.CourseCount.ToString(CultureInfo.InvariantCulture),
                 N(shape.StubCourseShare), N(shape.MedianCourseLength), N(shape.FillerShare),
-                N(shape.MinSideP5), N(shape.UncuttableShare), N(shape.AwkwardShare),
+                N(shape.MinSideP5), N(shape.MinWidthP5), N(shape.MinWidthP1), N(shape.NarrowWidthShare),
+                N(shape.UncuttableShare), N(shape.AwkwardShare),
                 N(shape.StructureDisagreement), N(shape.EdgesCrossed),
                 N(colour.DeltaEMean), N(colour.DeltaEP95), N(colour.DeltaEMax),
                 result.ColorsBeforeReduction.ToString(CultureInfo.InvariantCulture),
@@ -393,7 +394,8 @@ internal static class Program
                 $"тессер {tesserae.Count,6} " +
                 $"({(double)tesserae.Count / layout.TotalModules:0.00}×)  перекр {mask.OverlappedFraction():P2}  " +
                 $"голое>0,3м {mask.BareBeyond(layout.ModuleWidthMm * 0.3):P2}  дыра {bareR / layout.ModuleWidthMm:0.00}м  " +
-                $"узкая сторона p5 {shape.MinSideP5:0.0}мм  неколибельных {shape.UncuttableShare:P1}  излом {shape.KinkShare:P1}  " +
+                $"узкая сторона p5 {shape.MinSideP5:0.0}мм  ширина p5 {shape.MinWidthP5:0.0} p1 {shape.MinWidthP1:0.0}мм  " +
+                $"узких<5мм {shape.NarrowWidthShare:P1}  неколибельных {shape.UncuttableShare:P1}  излом {shape.KinkShare:P1}  " +
                 $"ΔE {colour.DeltaEMean:0.0}/{colour.DeltaEP95:0.0}  цветов {colour.ColorsUsed}  " +
                 $"обрыв {colour.BandingShare:P1}  слипание {colour.MergedShare:P1}  " +
                 $"{watch.ElapsedMilliseconds}мс");

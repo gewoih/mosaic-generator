@@ -84,6 +84,19 @@ internal static class Metrics
         /// <summary>Narrowest side of the piece in millimetres, 5th percentile — what the nippers must hit.</summary>
         public required double MinSideP5 { get; init; }
 
+        /// <summary>
+        /// The true minimal width of the piece polygon — the smallest span over every edge normal
+        /// (rotating calipers), not only the two course axes. A piece cut at an angle to its course
+        /// is narrower than <see cref="MinSideP5"/> sees. Carried at p5 and p1 to reconcile the two
+        /// measurements against the 5 mm hand limit (бэклог п. 8).
+        /// </summary>
+        public required double MinWidthP5 { get; init; }
+
+        public required double MinWidthP1 { get; init; }
+
+        /// <summary>Share of pieces whose true minimal width is under 5 mm — the hand limit, orientation-free.</summary>
+        public required double NarrowWidthShare { get; init; }
+
         /// <summary>Share of pieces narrower than 3 mm on their short side — nothing cuts that.</summary>
         public required double UncuttableShare { get; init; }
 
@@ -119,6 +132,7 @@ internal static class Metrics
             .ToDictionary(g => g.Key, g => g.OrderBy(t => t.IndexInCourse).ToArray());
 
         var minSides = new List<double>(tesserae.Count);
+        var minWidths = new List<double>(tesserae.Count);
         int slivers = 0;
         int manySided = 0;
         int kinks = 0;
@@ -131,6 +145,7 @@ internal static class Metrics
                 PointD axis = CourseAxis(course, i);
                 (double along, double across) = Extent(course[i].Polygon, axis);
                 minSides.Add(Math.Min(along, across));
+                minWidths.Add(MinWidth(course[i].Polygon));
                 if (Math.Max(along, across) / Math.Max(1e-6, Math.Min(along, across)) > 3.0)
                 {
                     slivers++;
@@ -232,6 +247,9 @@ internal static class Metrics
                 : Percentile([.. disagreements.Order()], 0.5),
             EdgesCrossed = onEdge == 0 ? 0.0 : (double)crossing / onEdge,
             MinSideP5 = Percentile([.. minSides.Order()], 0.05),
+            MinWidthP5 = Percentile([.. minWidths.Order()], 0.05),
+            MinWidthP1 = Percentile([.. minWidths.Order()], 0.01),
+            NarrowWidthShare = (double)minWidths.Count(m => m < 5.0) / minWidths.Count,
             UncuttableShare = (double)minSides.Count(m => m < 3.0) / minSides.Count,
             AwkwardShare = (double)minSides.Count(m => m < 5.0) / minSides.Count,
         };
@@ -286,6 +304,44 @@ internal static class Metrics
         }
 
         return (Math.Max(1e-6, alongMax - alongMin), Math.Max(1e-6, acrossMax - acrossMin));
+    }
+
+    /// <summary>
+    /// Smallest width of a convex-ish polygon over every edge normal (rotating calipers). For a
+    /// convex polygon the minimal-width direction is always perpendicular to one of the edges, so
+    /// projecting all vertices onto each edge normal and taking the smallest span is exact; for the
+    /// mild concavity a cut piece can have it is a close upper bound.
+    /// </summary>
+    private static double MinWidth(PointD[] polygon)
+    {
+        if (polygon.Length < 3)
+        {
+            return 0.0;
+        }
+
+        double best = double.MaxValue;
+        for (int k = 0; k < polygon.Length; k++)
+        {
+            PointD e = Sub(polygon[(k + 1) % polygon.Length], polygon[k]);
+            double len = Math.Sqrt((e.X * e.X) + (e.Y * e.Y));
+            if (len < 1e-9)
+            {
+                continue;
+            }
+
+            double nx = -e.Y / len, ny = e.X / len;
+            double min = double.MaxValue, max = double.MinValue;
+            foreach (PointD p in polygon)
+            {
+                double d = (p.X * nx) + (p.Y * ny);
+                min = Math.Min(min, d);
+                max = Math.Max(max, d);
+            }
+
+            best = Math.Min(best, max - min);
+        }
+
+        return best == double.MaxValue ? 0.0 : best;
     }
 
     /// <summary>Angle between two orientations, in degrees, 0 to 90 — direction has no sign here.</summary>
