@@ -116,7 +116,7 @@ internal static class Program
         if (args.Contains("--gamut"))
         {
             Gamut.Report(image, palette);
-            Gamut.Contrast(image, palette, colorCeilings[0]);
+            Gamut.Contrast(image, palette);
         }
 
         var runs = new List<Run>();
@@ -349,7 +349,7 @@ internal static class Program
             // bench scores the objective the pipeline actually pursues.
             CieLab[] observed = PaletteObservation.Lab(palette);
             Metrics.Colour colour = Metrics.Colours(
-                layout, tesserae, cells, indices, palette, observed, run.MaxColors);
+                layout, tesserae, cells, indices, palette, observed);
             (double bareR, _) = mask.LargestBare();
 
             csv.AppendLine(string.Join(',', new[]

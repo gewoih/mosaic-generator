@@ -1,6 +1,7 @@
 using MosaicGenerator.Core.Colors;
 using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Grid;
+using MosaicGenerator.Core.Quantization;
 using MosaicGenerator.Core.Rendering;
 
 namespace MosaicGenerator.Diag;
@@ -437,8 +438,7 @@ internal static class Metrics
         IReadOnlyList<LinearRgb> cells,
         IReadOnlyList<int> indices,
         Palette palette,
-        IReadOnlyList<CieLab> observed,
-        int shadeCount)
+        IReadOnlyList<CieLab> observed)
     {
         var deltas = new double[cells.Count];
         var counts = new Dictionary<int, int>();
@@ -471,7 +471,7 @@ internal static class Metrics
 
         double[] usedL = [.. counts.Keys.Select(k => observed[k].L).OrderDescending()];
         (double Banding, double Merged) pairs = NeighbourLosses(
-            layout, tesserae, cells, indices, observed, ToneStep(observed, shadeCount));
+            layout, tesserae, cells, indices, observed, ToneMap.LightnessStep([.. observed]));
 
         return new Colour
         {
@@ -490,19 +490,6 @@ internal static class Metrics
             DeltaLMedian = sortedDL.Length == 0 ? 0.0 : Percentile(sortedDL, 0.5),
             HueDriftShare = (double)hueDrift / cells.Count,
         };
-    }
-
-    /// <summary>
-    /// The tonal step of a work in <paramref name="shadeCount"/> shades: the range the material
-    /// covers, divided by how many shades are allowed. Second and ninety-eighth percentiles rather
-    /// than the extremes, matching <c>ToneMap</c>, so both speak of the same range.
-    /// </summary>
-    private static double ToneStep(IReadOnlyList<CieLab> observed, int shadeCount)
-    {
-        double[] sorted = [.. observed.Select(c => c.L).Order()];
-        double low = sorted[Math.Clamp((int)Math.Round(0.02 * (sorted.Length - 1)), 0, sorted.Length - 1)];
-        double high = sorted[Math.Clamp((int)Math.Round(0.98 * (sorted.Length - 1)), 0, sorted.Length - 1)];
-        return (high - low) / Math.Max(1, shadeCount);
     }
 
     private static double Chroma(CieLab c) => Math.Sqrt((c.A * c.A) + (c.B * c.B));

@@ -1,6 +1,7 @@
 using MosaicGenerator.Core.Colors;
 using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Imaging;
+using MosaicGenerator.Core.Quantization;
 
 namespace MosaicGenerator.Diag;
 
@@ -62,24 +63,24 @@ internal static class Gamut
     }
 
     /// <summary>
-    /// How much the picture separates one band from the next, down its middle. A mosaic in
-    /// <paramref name="shadeCount"/> shades has a tonal step of the range divided by that many, and
-    /// anything the photograph separates by less than a step arrives as one colour however many
-    /// pieces are laid — which is how a hazy mountain ridge comes out the same blue as the sky
-    /// behind it.
+    /// How much the picture separates one band from the next, down its middle. The mosaic's tonal
+    /// step is the material's lightness range divided by how many distinct rungs the palette holds
+    /// (<see cref="ToneMap.LightnessStep"/>), and anything the photograph separates by less than a
+    /// step arrives as one colour however many pieces are laid — which is how a hazy mountain ridge
+    /// comes out the same blue as the sky behind it.
     /// </summary>
-    public static void Contrast(SourceImage image, Palette palette, int shadeCount, int rows = 30)
+    public static void Contrast(SourceImage image, Palette palette, int rows = 30)
     {
         CieLab[] shades = [.. palette.Colors.Select(c => c.Lab)];
-        double[] lightness = [.. shades.Select(s => s.L).Order()];
-        double step = (lightness[^3] - lightness[2]) / shadeCount;
+        double step = ToneMap.LightnessStep(shades);
 
         int blockH = Math.Max(1, image.Height / rows);
         int x0 = image.Width / 4;
         int blockW = Math.Max(1, image.Width / 2);
 
         Console.WriteLine(
-            $"Профиль по средней полосе, шаг тона готовой работы {step:0.0} ΔE ({shadeCount} оттенков):");
+            $"Профиль по средней полосе, шаг тона готовой работы {step:0.0} ΔE "
+            + $"({ToneMap.DistinctShadeCount(shades)} различимых ступеней палитры):");
 
         CieLab? previous = null;
         for (int r = 0; r < rows; r++)

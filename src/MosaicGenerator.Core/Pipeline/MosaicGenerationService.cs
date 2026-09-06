@@ -86,7 +86,10 @@ public sealed class MosaicGenerationService(
         CellNeighbourhood neighbourhood = CellNeighbourhood.Build(tesserae, layout);
         CieLab[] settledLab = CellSmoother.Settle(cellLab, neighbourhood);
 
-        CieLab[] stretchedLab = ToneMap.IntoPaletteRange(settledLab, paletteLab, request.MaxColors);
+        // The tonal step ToneMap fades out below is taken from the palette's own tonal density, not
+        // from request.MaxColors — the article ceiling has nothing to do with how hard to open the
+        // photograph's tones. See docs/14-maxcolors-dve-veshchi-plan.md (TODO п. 14).
+        CieLab[] stretchedLab = ToneMap.IntoPaletteRange(settledLab, paletteLab);
 
         // Spreading the whole picture cannot separate what the picture never separated: haze puts a
         // far ridge and the sky behind it inside one tonal step, and there the cartoon has to lie on

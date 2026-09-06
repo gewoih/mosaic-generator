@@ -46,20 +46,91 @@ public static class ToneMap
     private const double AnchorMargin = 0.15;
 
     /// <summary>
+    /// How far apart in L* two courses of smalt must sit to read as different shades on the wall.
+    /// Coarser than a pixel-level JND on purpose: a mosaic is seen from across the room, not held to
+    /// the eye. Used only to count how many distinct rungs of lightness the palette really holds
+    /// (<see cref="DistinctShadeCount"/>), which sets the tonal step below which the photograph is
+    /// left alone. On the ArtWorker catalogue this value yields twelve rungs and a step of about
+    /// 6.9 ΔE — where <c>request.MaxColors</c> = 12 used to put it: the old number was right in size
+    /// and wrong in derivation, because it moved with a form field that has nothing to do with the
+    /// glass. See docs/14-maxcolors-dve-veshchi-plan.md.
+    /// </summary>
+    private const double CourseSeparation = 6.5;
+
+    /// <summary>
+    /// The finest tonal step the finished work can carry: the material's lightness range divided by
+    /// how many distinct rungs of lightness the palette holds (<see cref="DistinctShadeCount"/>).
+    /// Cells closer together than this cannot be told apart in the glass, so the mapping leaves a
+    /// photograph flatter than one step untouched.
+    ///
+    /// This was once the range divided by <c>request.MaxColors</c> — the article ceiling from the
+    /// form. That number is about how many articles to order, not about how hard to open the
+    /// photograph's tones, and letting it in here meant raising the form from 12 to 15 also pulled
+    /// the whole panel's contrast. The step is a property of the glass. See
+    /// docs/14-maxcolors-dve-veshchi-plan.md.
+    /// </summary>
+    public static double LightnessStep(ReadOnlySpan<CieLab> palette)
+    {
+        if (palette.Length == 0)
+        {
+            return 0.0;
+        }
+
+        (double low, double _, double high) = LightnessRange(palette);
+        return (high - low) / DistinctShadeCount(palette);
+    }
+
+    /// <summary>
+    /// How many rungs of lightness the palette really holds: its shades walked from dark to light,
+    /// a new rung counted only when it clears the last counted one by <see cref="CourseSeparation"/>
+    /// L*. The catalogue carries several whites within a unit of each other; those count once,
+    /// because two courses that close read as one shade on the wall. Measured within the working
+    /// range (second to ninety-eighth percentile), matching the rest of this class.
+    /// </summary>
+    public static int DistinctShadeCount(ReadOnlySpan<CieLab> palette)
+    {
+        if (palette.Length == 0)
+        {
+            return 1;
+        }
+
+        (double low, double _, double high) = LightnessRange(palette);
+
+        double[] sorted = new double[palette.Length];
+        for (int i = 0; i < palette.Length; i++)
+        {
+            sorted[i] = palette[i].L;
+        }
+
+        Array.Sort(sorted);
+
+        int rungs = 0;
+        double last = double.NegativeInfinity;
+        foreach (double l in sorted)
+        {
+            if (l < low || l > high)
+            {
+                continue;
+            }
+
+            if (rungs == 0 || l - last >= CourseSeparation)
+            {
+                rungs++;
+                last = l;
+            }
+        }
+
+        return Math.Max(1, rungs);
+    }
+
+    /// <summary>
     /// Redistributes the sampled cells into the palette's own range.
     /// </summary>
     /// <param name="cells">One colour per tessera, as sampled from the photograph.</param>
     /// <param name="palette">The shades as they will be seen — through the joint, if that is on.</param>
-    /// <param name="shadeCount">
-    /// How many shades the finished work may use. It sets the tonal step of the result, and that step
-    /// is the yardstick for how crowded the photograph is: cells closer together than one step of the
-    /// finished work cannot be told apart in the material at all.
-    /// </param>
     public static CieLab[] IntoPaletteRange(
-        ReadOnlySpan<CieLab> cells, ReadOnlySpan<CieLab> palette, int shadeCount)
+        ReadOnlySpan<CieLab> cells, ReadOnlySpan<CieLab> palette)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(shadeCount, 1);
-
         if (cells.Length == 0 || palette.Length == 0)
         {
             return cells.ToArray();
@@ -69,7 +140,7 @@ public static class ToneMap
         (double cellLow, double cellMedian, double cellHigh) = LightnessRange(cells);
         double[] ceilings = ChromaCeilings(palette);
 
-        double step = (paletteHigh - paletteLow) / shadeCount;
+        double step = (paletteHigh - paletteLow) / DistinctShadeCount(palette);
         double cellSpan = Math.Max(1e-6, cellHigh - cellLow);
         double paletteSpan = paletteHigh - paletteLow;
 

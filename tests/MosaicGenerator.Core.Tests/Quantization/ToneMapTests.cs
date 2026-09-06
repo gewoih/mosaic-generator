@@ -5,11 +5,16 @@ namespace MosaicGenerator.Core.Tests.Quantization;
 
 public class ToneMapTests
 {
-    /// <summary>A range spanning L* 30 to 95, chroma up to about 40 — roughly a smalt catalogue.</summary>
+    /// <summary>
+    /// A range spanning L* 30 to 94, chroma up to about 40 — roughly a smalt catalogue. The L* grid
+    /// is 2 units, finer than the ~6,5 that separates one rung of lightness from the next, so
+    /// <see cref="ToneMap.DistinctShadeCount"/> reads about nine rungs off it (step ~7 ΔE), close to
+    /// the real ArtWorker catalogue's twelve rungs and ~6,9 ΔE step.
+    /// </summary>
     private static CieLab[] Range()
     {
         var shades = new List<CieLab>();
-        for (int l = 30; l <= 95; l += 5)
+        for (int l = 30; l <= 94; l += 2)
         {
             for (int hue = 0; hue < 360; hue += 45)
             {
@@ -28,7 +33,7 @@ public class ToneMapTests
         // gradient the photograph does not have — this is the failure the pipeline test caught.
         CieLab[] cells = [.. Enumerable.Repeat(new CieLab(60, 5, -10), 400)];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         foreach (CieLab cell in mapped)
         {
@@ -50,7 +55,7 @@ public class ToneMapTests
         CieLab[] cells = [.. Enumerable.Range(0, 800)
             .Select(_ => new CieLab(55.0 + (random.NextDouble() * 25.0), -2, -14))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         double before = cells.Max(c => c.L) - cells.Min(c => c.L);
         double after = mapped.Max(c => c.L) - mapped.Min(c => c.L);
@@ -72,7 +77,7 @@ public class ToneMapTests
                 i % 5 == 0 ? 70.0 + (random.NextDouble() * 20.0) : 40.0 + (random.NextDouble() * 12.0),
                 -2, -14))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         Assert.Equal(Median([.. cells.Select(c => c.L)]), Median([.. mapped.Select(c => c.L)]), 3);
     }
@@ -86,7 +91,7 @@ public class ToneMapTests
         CieLab[] cells = [.. Enumerable.Range(0, 900)
             .Select(_ => new CieLab(58.0 + (random.NextDouble() * 9.0), -2, -14))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         Assert.InRange(mapped.Min(c => c.L), 29.0, 100.0);
         Assert.InRange(mapped.Max(c => c.L), 0.0, 96.0);
@@ -101,9 +106,9 @@ public class ToneMapTests
         CieLab[] cells = [.. Enumerable.Range(0, 600)
             .Select(_ => new CieLab(2.0 + (random.NextDouble() * 14.0), -2, -14))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
-        // Range() runs 30..95, so the anchor lands 0,15 of 65 L* above the dark end.
+        // Range() runs 30..94, so the anchor lands 0,15 of 64 L* above the dark end.
         Assert.InRange(Median([.. mapped.Select(c => c.L)]), 36.0, 44.0);
     }
 
@@ -124,7 +129,7 @@ public class ToneMapTests
             cells.Add(new CieLab(35.0 + (i % 40), 3, 6));
         }
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange([.. cells], Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange([.. cells], Range());
 
         double sky = mapped.Take(700).Max(c => c.L) - mapped.Take(700).Min(c => c.L);
         double subject = mapped.Skip(700).Max(c => c.L) - mapped.Skip(700).Min(c => c.L);
@@ -141,7 +146,7 @@ public class ToneMapTests
         CieLab[] cells = [.. Enumerable.Range(0, 500)
             .Select(_ => new CieLab(random.NextDouble() * 100.0, random.NextDouble() * 30.0 - 15.0, 8))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 10);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         for (int i = 0; i < cells.Length; i++)
         {
@@ -164,7 +169,7 @@ public class ToneMapTests
         // its own picks wildly different shades for colours the photograph barely separates.
         CieLab[] cells = [.. Enumerable.Range(0, 200).Select(i => new CieLab(55, 0, -70.0 - (i * 0.1)))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         foreach (CieLab cell in mapped)
         {
@@ -180,7 +185,7 @@ public class ToneMapTests
     {
         CieLab[] cells = [.. Enumerable.Range(0, 200).Select(i => new CieLab(55, 10, -12.0 - (i * 0.01)))];
 
-        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range(), shadeCount: 12);
+        CieLab[] mapped = ToneMap.IntoPaletteRange(cells, Range());
 
         for (int i = 0; i < cells.Length; i++)
         {
@@ -192,7 +197,42 @@ public class ToneMapTests
     [Fact]
     public void AnEmptyLayoutIsHandedBackUnchanged()
     {
-        Assert.Empty(ToneMap.IntoPaletteRange([], Range(), shadeCount: 12));
+        Assert.Empty(ToneMap.IntoPaletteRange([], Range()));
+    }
+
+    [Fact]
+    public void AddingArticlesTheEyeCannotTellApartDoesNotChangeTheMapping()
+    {
+        // TODO п. 14: the tonal step is a property of the glass, not of how many articles a run is
+        // allowed. Padding the palette with shades that fall inside one rung of lightness — the
+        // catalogue's several near-identical whites — must leave the result untouched.
+        var random = new Random(20260906);
+        CieLab[] cells = [.. Enumerable.Range(0, 800)
+            .Select(_ => new CieLab(55.0 + (random.NextDouble() * 25.0), -2, -14))];
+
+        CieLab[] lean = Range();
+        CieLab[] padded = [.. lean, .. Enumerable.Range(0, 40).Select(i => new CieLab(92.0 + (i * 0.02), 1, 1))];
+
+        Assert.Equal(ToneMap.DistinctShadeCount(lean), ToneMap.DistinctShadeCount(padded));
+
+        CieLab[] a = ToneMap.IntoPaletteRange(cells, lean);
+        CieLab[] b = ToneMap.IntoPaletteRange(cells, padded);
+        for (int i = 0; i < a.Length; i++)
+        {
+            Assert.Equal(a[i].L, b[i].L, 6);
+        }
+    }
+
+    [Fact]
+    public void DistinctShadeCountCollapsesShadesInsideOneRung()
+    {
+        // Six shades within a unit of each other are one rung, not six.
+        CieLab[] huddle = [.. Enumerable.Range(0, 6).Select(i => new CieLab(50.0 + (i * 0.2), 0, 0))];
+        Assert.Equal(1, ToneMap.DistinctShadeCount(huddle));
+
+        // Spread them a clear rung apart and each counts.
+        CieLab[] spread = [.. Enumerable.Range(0, 6).Select(i => new CieLab(30.0 + (i * 10.0), 0, 0))];
+        Assert.Equal(6, ToneMap.DistinctShadeCount(spread));
     }
 
     private static double Chroma(CieLab lab) => Math.Sqrt((lab.A * lab.A) + (lab.B * lab.B));
