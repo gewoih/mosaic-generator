@@ -9,6 +9,12 @@ public sealed record MaterialLine
 
     public required PaletteColor Color { get; init; }
 
+    /// <summary>
+    /// Articles visually identical to <see cref="Color"/> — what to order instead when it is out
+    /// of stock. Empty for a shade that stands alone. See docs/redukciya-svyazka-plan.md (п. 15).
+    /// </summary>
+    public IReadOnlyList<PaletteColor> Alternatives { get; init; } = [];
+
     public required int ModuleCount { get; init; }
 
     /// <summary>Area of the modules themselves.</summary>

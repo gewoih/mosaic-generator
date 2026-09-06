@@ -40,6 +40,8 @@ public static class MaterialCalculator
         {
             (int paletteIndex, int moduleCount) = ordered[position];
             PaletteColor color = plan.Palette.Colors[paletteIndex];
+            PaletteColor[] alternatives = [.. plan.Palette.ClusterOf(paletteIndex).Alternatives
+                .Select(i => plan.Palette.Colors[i])];
 
             double netAreaM2 = areaMm2[paletteIndex] / 1_000_000.0;
             double grossAreaM2 = netAreaM2 * wasteFactor;
@@ -49,6 +51,7 @@ public static class MaterialCalculator
             {
                 Code = (position + 1).ToString(CultureInfo.InvariantCulture),
                 Color = color,
+                Alternatives = alternatives,
                 ModuleCount = moduleCount,
                 NetAreaM2 = netAreaM2,
                 GrossAreaM2 = grossAreaM2,

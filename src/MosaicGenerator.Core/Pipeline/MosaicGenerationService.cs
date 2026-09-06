@@ -99,26 +99,31 @@ public sealed class MosaicGenerationService(
         CieLab[] mappedLab = LocalContrast.Lift(
             stretchedLab, CellNeighbourhood.Build(tesserae, LocalContrast.ReachFor(layout)));
 
-        int[] indices = Quantizer.Map(mappedLab, paletteLab);
+        // Against the cluster representatives, not the whole palette: articles too close to tell
+        // apart share one representative, so two indistinguishable articles can never both be
+        // picked into one cartoon, and the quantiser is not left to split a shade it will only
+        // have to merge back. See docs/redukciya-svyazka-plan.md (TODO п. 15).
+        IReadOnlyList<int> candidateColors = palette.RepresentativeIndices;
+        int[] indices = Quantizer.Map(mappedLab, paletteLab, candidateColors);
 
         // Quantizer picked each cell's nearest shade on its own, with no notion of what the
         // neighbours around it picked. ToneMap's spread is what turns a couple of ΔE of noise into
         // a jump onto a differently saturated article, so this settles the choice against nearby
         // cells before anything downstream treats it as final — see docs/krap-tona-plan.md.
-        int[] allColors = [.. Enumerable.Range(0, paletteLab.Length)];
-        indices = CoherentMap.Settle(mappedLab, paletteLab, indices, allColors, neighbourhood);
+        indices = CoherentMap.Settle(mappedLab, paletteLab, indices, candidateColors, neighbourhood);
 
+        // The reducer now hands the cells of each dropped shade to survivors with an eye on what
+        // their neighbours settled on — sharing the same neighbourhood — rather than one
+        // nearest-shade lookup each. That point-by-point hand-out was the main way the settling
+        // above got undone (TODO п. 13, docs/redukciya-svyazka-plan.md).
         ReductionOutcome reduction = PaletteReducer.Reduce(
             mappedLab, indices, paletteLab, request.MaxColors,
-            PinnedIndices(palette, request.PinnedArticles), tesserae);
+            PinnedIndices(palette, request.PinnedArticles), tesserae, neighbourhood);
 
-        // The reduction re-quantised orphaned cells one at a time as their shade was dropped, so the
-        // same disagreement can reappear on the surviving, smaller palette. Measured 2026-09-05 over
-        // 33 runs: dropping this pass costs singles 0,63 → 0,92 %, loud singles 0,41 → 0,61 %, pieces
-        // in islands of one or two 1,60 → 2,05 %, and puts a white tessera in the middle of the
-        // dolphin's dark back. It is a symptom cure and known to be one — the disagreement should not
-        // be created in the first place, which is TODO п.11 — but until the reducer stops making it,
-        // removing this pass only puts the crumb back.
+        // A second settling pass on the reduced palette. The hand-out above cut how much this pass
+        // has to fix but did not remove the need for it: measured 2026-09-06, dropping it took loud
+        // singles from 0,0013 to 0,0026 (worse than before п. 13) and lost the blue candle on
+        // human 40×40. So it stays — the "two passes" tech-debt is reduced, not closed.
         int[] finalIndices = CoherentMap.Settle(
             mappedLab, paletteLab, reduction.Indices, reduction.RetainedColors, neighbourhood);
 

@@ -419,6 +419,13 @@ internal static class Metrics
         public required double SmallIslandShare { get; init; }
 
         /// <summary>
+        /// Share of pieces in a connected same-article island of 3 to 10 — the blob the singles
+        /// mechanism does not touch (a piece inside it has same-article neighbours). On human 40×40
+        /// this is the blue / near-white patch in the cheek shadow (бэклог п. 3).
+        /// </summary>
+        public required double MidIslandShare { get; init; }
+
+        /// <summary>
         /// Median of (L* of the placed article − L* of the photograph cell). The panel drifting
         /// bodily lighter or darker than the photo, the same way for every piece
         /// (docs/tsvet-uezzhaet-plan.md).
@@ -463,7 +470,7 @@ internal static class Metrics
             }
         }
 
-        (double Singleton, double Loud, double Island) coherence =
+        (double Singleton, double Loud, double Island, double MidIsland) coherence =
             NeighbourArticles(tesserae, layout, indices, observed);
 
         Array.Sort(deltas);
@@ -487,6 +494,7 @@ internal static class Metrics
             SingletonShare = coherence.Singleton,
             LoudSingletonShare = coherence.Loud,
             SmallIslandShare = coherence.Island,
+            MidIslandShare = coherence.MidIsland,
             DeltaLMedian = sortedDL.Length == 0 ? 0.0 : Percentile(sortedDL, 0.5),
             HueDriftShare = (double)hueDrift / cells.Count,
         };
@@ -507,7 +515,7 @@ internal static class Metrics
     /// 15 ΔE from the mean of those clashing neighbours. An island is a connected run of one
     /// article; the share returned is of pieces in islands of one or two.
     /// </summary>
-    private static (double Singleton, double Loud, double Island) NeighbourArticles(
+    private static (double Singleton, double Loud, double Island, double MidIsland) NeighbourArticles(
         IReadOnlyList<Tessera> tesserae,
         MosaicLayout layout,
         IReadOnlyList<int> indices,
@@ -516,7 +524,7 @@ internal static class Metrics
         int n = tesserae.Count;
         if (n == 0)
         {
-            return (0.0, 0.0, 0.0);
+            return (0.0, 0.0, 0.0, 0.0);
         }
 
         CellNeighbourhood hood = CellNeighbourhood.Build(tesserae, layout);
@@ -590,15 +598,21 @@ internal static class Metrics
         }
 
         int inSmallIsland = 0;
+        int inMidIsland = 0;
         for (int i = 0; i < n; i++)
         {
-            if (size[Find(i)] <= 2)
+            int islandSize = size[Find(i)];
+            if (islandSize <= 2)
             {
                 inSmallIsland++;
             }
+            else if (islandSize <= 10)
+            {
+                inMidIsland++;
+            }
         }
 
-        return ((double)singles / n, (double)loud / n, (double)inSmallIsland / n);
+        return ((double)singles / n, (double)loud / n, (double)inSmallIsland / n, (double)inMidIsland / n);
     }
 
     /// <summary>

@@ -48,7 +48,7 @@ public static class CoherentMap
     /// not collapse back onto a single article. See <c>docs/krap-tona-plan.md</c> for the sweep
     /// that picked it.
     /// </summary>
-    private const double NeighbourWeight = 0.5;
+    internal const double NeighbourWeight = 0.5;
 
     /// <summary>
     /// The weight the agreement term is given for a loud lone single (see

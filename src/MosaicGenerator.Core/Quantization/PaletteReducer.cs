@@ -16,10 +16,8 @@ public sealed record ReductionOutcome
     public required int ModulesReassigned { get; init; }
 
     /// <summary>
-    /// The palette indices still in use once the reduction stopped. What <see cref="CoherentMap"/>
-    /// needs as its candidate set for the post-reduction settling pass — the orphan cells re-quantised
-    /// mid-reduction went through <see cref="Quantizer.NearestIndex"/> one at a time, and can use a
-    /// second look at what their neighbours settled on.
+    /// The palette indices still in use once the reduction stopped — <see cref="CoherentMap"/>'s
+    /// candidate set for the settling pass that follows the reduction.
     /// </summary>
     public required IReadOnlyList<int> RetainedColors { get; init; }
 
@@ -61,7 +59,8 @@ public static class PaletteReducer
         ReadOnlySpan<CieLab> paletteLab,
         int maxColors,
         IReadOnlySet<int>? pinned,
-        IReadOnlyList<Tessera>? tesserae = null)
+        IReadOnlyList<Tessera>? tesserae = null,
+        CellNeighbourhood? neighbourhood = null)
     {
         ArgumentNullException.ThrowIfNull(indices);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxColors, 1);
@@ -130,15 +129,27 @@ public static class PaletteReducer
                 candidateLab[i] = paletteLab[candidateIndices[i]];
             }
 
-            foreach (int cell in orphans)
+            // Re-quantised from each cell's own colour rather than moved wholesale to one
+            // replacement: cells that shared a discarded shade can legitimately land on different
+            // survivors. When the caller shares a neighbourhood, the pick also weighs what nearby
+            // cells settled on — the point-by-point NearestIndex is exactly where the first
+            // CoherentMap pass's work was being undone (TODO п. 13, docs/redukciya-svyazka-plan.md).
+            if (neighbourhood is null)
             {
-                // Re-quantised from the cell's own colour rather than moved wholesale to one
-                // replacement: cells that shared a discarded shade can legitimately land on
-                // different survivors.
-                int replacement = candidateIndices[Quantizer.NearestIndex(cellLab[cell], candidateLab)];
-
-                reduced[cell] = replacement;
-                cellsByColor[replacement].Add(cell);
+                foreach (int cell in orphans)
+                {
+                    int replacement = candidateIndices[Quantizer.NearestIndex(cellLab[cell], candidateLab)];
+                    reduced[cell] = replacement;
+                    cellsByColor[replacement].Add(cell);
+                }
+            }
+            else
+            {
+                HandOutOrphans(orphans, reduced, cellLab, paletteLab, candidateIndices, neighbourhood);
+                foreach (int cell in orphans)
+                {
+                    cellsByColor[reduced[cell]].Add(cell);
+                }
             }
         }
 
@@ -163,6 +174,97 @@ public static class PaletteReducer
             RetainedColors = [.. retained.Order()],
             StoppedAtPinnedColors = stoppedAtPinned,
         };
+    }
+
+    /// <summary>
+    /// Hands the cells of a just-dropped shade to survivors with an eye on what their neighbours
+    /// carry, rather than one nearest-shade lookup each. Seeds every orphan from its own colour,
+    /// then relaxes once — orphans with the most already-settled neighbours first, so a confident
+    /// context is spent before a doubtful one — choosing the candidate that minimises the cell's
+    /// own colour error plus <see cref="CoherentMap.NeighbourWeight"/> times its weighted
+    /// disagreement with the neighbours' current pick. Same cost shape and same <c>Match</c> as
+    /// <see cref="CoherentMap"/>; this only stops the reducer from recreating the very
+    /// disagreement the first settling pass removed.
+    /// </summary>
+    private static void HandOutOrphans(
+        List<int> orphans,
+        int[] assigned,
+        ReadOnlySpan<CieLab> cellLab,
+        ReadOnlySpan<CieLab> paletteLab,
+        int[] candidates,
+        CellNeighbourhood neighbourhood)
+    {
+        var candidateLab = new CieLab[candidates.Length];
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            candidateLab[i] = paletteLab[candidates[i]];
+        }
+
+        // Seed: nearest survivor to the cell's own colour — the same starting point the plain
+        // hand-out would have reached.
+        var orphanSet = new HashSet<int>(orphans);
+        foreach (int cell in orphans)
+        {
+            assigned[cell] = candidates[Quantizer.NearestIndex(cellLab[cell], candidateLab)];
+        }
+
+        // Settle the well-surrounded orphans first; ties on the cell index, so a run repeats.
+        int[] order = [.. orphans];
+        int SettledNeighbours(int cell)
+        {
+            int count = 0;
+            foreach (int j in neighbourhood.Of(cell))
+            {
+                if (!orphanSet.Contains(j))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        Array.Sort(order, (a, b) =>
+        {
+            int byContext = SettledNeighbours(b).CompareTo(SettledNeighbours(a));
+            return byContext != 0 ? byContext : a.CompareTo(b);
+        });
+
+        foreach (int cell in order)
+        {
+            ReadOnlySpan<int> ring = neighbourhood.Of(cell);
+            double weightSum = 0.0;
+            foreach (int j in ring)
+            {
+                weightSum += ColorDistance.NeighbourWeight(cellLab[cell], cellLab[j]);
+            }
+
+            int best = assigned[cell];
+            double bestCost = double.MaxValue;
+            foreach (int candidate in candidates)
+            {
+                double cost = ColorDistance.MatchSquared(cellLab[cell], paletteLab[candidate]);
+                if (weightSum > 0.0)
+                {
+                    double disagreement = 0.0;
+                    foreach (int j in ring)
+                    {
+                        disagreement += ColorDistance.NeighbourWeight(cellLab[cell], cellLab[j])
+                            * ColorDistance.MatchSquared(paletteLab[candidate], paletteLab[assigned[j]]);
+                    }
+
+                    cost += CoherentMap.NeighbourWeight * (disagreement / weightSum);
+                }
+
+                if (cost < bestCost || (cost == bestCost && candidate == assigned[cell]))
+                {
+                    bestCost = cost;
+                    best = candidate;
+                }
+            }
+
+            assigned[cell] = best;
+        }
     }
 
     /// <summary>

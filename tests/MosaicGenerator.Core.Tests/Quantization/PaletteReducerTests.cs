@@ -181,6 +181,97 @@ public class PaletteReducerTests
         Assert.NotEqual(without.Indices, withConnectivity.Indices);
     }
 
+    [Fact]
+    public void WithoutANeighbourhoodAnOrphanGoesToItsOwnNearestSurvivor()
+    {
+        (Palette palette, LinearRgb[] cells, Tessera[] tesserae, int centre) = OrphanInABlockOfB();
+        int[] indices = Quantizer.Map(cells, palette);
+
+        // No neighbourhood argument: the centre cell is re-quantised from its own colour, which
+        // sits nearer A than B.
+        ReductionOutcome outcome = PaletteReducer.Reduce(
+            Quantizer.ToLab(cells), [.. indices], PaletteObservation.Lab(palette),
+            maxColors: 2, pinned: null, tesserae);
+
+        Assert.Equal(0, outcome.Indices[centre]);   // A
+    }
+
+    [Fact]
+    public void AnOrphanRingedByOneSurvivorFollowsItEvenWhenItsOwnColourLeansTheOtherWay()
+    {
+        (Palette palette, LinearRgb[] cells, Tessera[] tesserae, int centre) = OrphanInABlockOfB();
+        int[] indices = Quantizer.Map(cells, palette);
+        var hood = CellNeighbourhood.Build(tesserae, 15.0);
+
+        ReductionOutcome outcome = PaletteReducer.Reduce(
+            Quantizer.ToLab(cells), [.. indices], PaletteObservation.Lab(palette),
+            maxColors: 2, pinned: null, tesserae, hood);
+
+        Assert.Equal(2, outcome.Indices[centre]);   // B — the shade every neighbour carries
+        Assert.Equal(2, outcome.Indices.Distinct().Count());
+        Assert.Equal(cells.Length, outcome.Indices.Length);
+    }
+
+    [Fact]
+    public void TheOrphanHandOutIsDeterministic()
+    {
+        (Palette palette, LinearRgb[] cells, Tessera[] tesserae, _) = OrphanInABlockOfB();
+        int[] indices = Quantizer.Map(cells, palette);
+        var hood = CellNeighbourhood.Build(tesserae, 15.0);
+
+        ReductionOutcome a = PaletteReducer.Reduce(
+            Quantizer.ToLab(cells), [.. indices], PaletteObservation.Lab(palette),
+            maxColors: 2, pinned: null, tesserae, hood);
+        ReductionOutcome b = PaletteReducer.Reduce(
+            Quantizer.ToLab(cells), [.. indices], PaletteObservation.Lab(palette),
+            maxColors: 2, pinned: null, tesserae, hood);
+
+        Assert.Equal(a.Indices, b.Indices);
+    }
+
+    /// <summary>
+    /// A 7×7 grid: an A border, a B interior, and one near-neutral centre cell whose own colour
+    /// leans to A but which is walled in by B. Reducing to two shades drops the centre.
+    /// </summary>
+    private static (Palette, LinearRgb[], Tessera[], int Centre) OrphanInABlockOfB()
+    {
+        Palette palette = PaletteFactory.OfHex("#808080", "#858585", "#909090");   // A, M, B
+
+        var hex = new string[49];
+        for (int row = 0; row < 7; row++)
+        {
+            for (int col = 0; col < 7; col++)
+            {
+                bool border = row == 0 || row == 6 || col == 0 || col == 6;
+                hex[(row * 7) + col] = border ? "#808080" : "#909090";
+            }
+        }
+
+        int centre = (3 * 7) + 3;
+        hex[centre] = "#858585";
+
+        LinearRgb[] cells = [.. hex.Select(h => Rgb.FromHex(h).ToLinear())];
+        Tessera[] tesserae = [.. Enumerable.Range(0, 49).Select(GridCell)];
+        return (palette, cells, tesserae, centre);
+    }
+
+    private static Tessera GridCell(int i)
+    {
+        int row = i / 7;
+        int col = i % 7;
+        double x = col * 10.0;
+        double y = row * 10.0;
+        return new Tessera
+        {
+            Polygon = [new(x, y), new(x + 8, y), new(x + 8, y + 8), new(x, y + 8)],
+            Centroid = new PointD(x + 4, y + 4),
+            AreaMm2 = 64,
+            CourseId = row,
+            IndexInCourse = col,
+            IsCut = false,
+        };
+    }
+
     private static Tessera LineCell(int i) => new()
     {
         Polygon = [new(i * 10, 0), new((i * 10) + 8, 0), new((i * 10) + 8, 8), new(i * 10, 8)],

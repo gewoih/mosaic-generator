@@ -150,7 +150,7 @@ internal static class Program
             "jointP50", "jointP90", "jointMax", "wideJoint", "jointArea",
             "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "uncuttable", "awkward", "structureOff", "edgesCrossed",
             "dE_mean", "dE_p95", "dE_max", "colorsBefore", "colorsUsed", "rare", "dominant",
-            "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "dL_med", "hueDrift",
+            "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "midIsland", "dL_med", "hueDrift",
             "reassigned", "ms"));
 
         foreach (Run run in runs)
@@ -382,6 +382,7 @@ internal static class Program
                 colour.RareColors.ToString(CultureInfo.InvariantCulture),
                 N(colour.DominantShare), N(colour.LightestGap), N(colour.BandingShare), N(colour.MergedShare),
                 N(colour.SingletonShare), N(colour.LoudSingletonShare), N(colour.SmallIslandShare),
+                N(colour.MidIslandShare),
                 N(colour.DeltaLMedian), N(colour.HueDriftShare),
                 result.ModulesReassigned.ToString(CultureInfo.InvariantCulture),
                 watch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture),

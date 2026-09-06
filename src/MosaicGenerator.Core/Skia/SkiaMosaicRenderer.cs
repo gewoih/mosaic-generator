@@ -105,8 +105,14 @@ public sealed class SkiaMosaicRenderer : IMosaicRenderer
                 canvas.DrawRect((float)s.X, (float)s.Y, (float)s.Width, (float)s.Height, fill);
                 canvas.DrawRect((float)s.X, (float)s.Y, (float)s.Width, (float)s.Height, stroke);
 
+                string label = $"{entry.Code}  {entry.Article}  ×{entry.ModuleCount}";
+                if (entry.Alternatives.Count > 0)
+                {
+                    label += $"   ← {string.Join(" ", entry.Alternatives)}";
+                }
+
                 canvas.DrawText(
-                    $"{entry.Code}  {entry.Article}  ×{entry.ModuleCount}",
+                    label,
                     (float)entry.TextAnchor.X, (float)entry.TextAnchor.Y + baseline,
                     SKTextAlign.Left, font, text);
             }

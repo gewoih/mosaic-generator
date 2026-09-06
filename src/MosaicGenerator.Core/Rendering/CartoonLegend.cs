@@ -14,7 +14,7 @@ public sealed record CartoonLegend
     private const double PadMm = 8.0;
     private const double SwatchMm = 10.0;
     private const double SwatchToTextMm = 4.0;
-    private const double CellWidthMm = 70.0;
+    private const double CellWidthMm = 92.0;
     private const double RowHeightMm = 14.0;
     private const double CapHeightMm = 4.5;
     private const int Columns = 2;
@@ -57,7 +57,8 @@ public sealed record CartoonLegend
                 LineIndex: i,
                 Code: report.Lines[i].Code,
                 Article: report.Lines[i].Color.Article,
-                ModuleCount: report.Lines[i].ModuleCount));
+                ModuleCount: report.Lines[i].ModuleCount,
+                Alternatives: [.. report.Lines[i].Alternatives.Select(a => a.Article)]));
         }
 
         return new CartoonLegend
@@ -72,4 +73,5 @@ public sealed record CartoonLegend
 }
 
 public sealed record CartoonLegendEntry(
-    RectD Swatch, PointD TextAnchor, int LineIndex, string Code, string Article, int ModuleCount);
+    RectD Swatch, PointD TextAnchor, int LineIndex, string Code, string Article, int ModuleCount,
+    IReadOnlyList<string> Alternatives);

@@ -36,6 +36,35 @@ public static class Quantizer
     }
 
     /// <summary>
+    /// Maps each cell to its nearest palette entry drawn from <paramref name="candidates"/> — the
+    /// cluster representatives, so two indistinguishable articles cannot both be picked. The full
+    /// <paramref name="paletteLab"/> is still what the returned values index.
+    /// </summary>
+    public static int[] Map(
+        ReadOnlySpan<CieLab> cellLab, ReadOnlySpan<CieLab> paletteLab, IReadOnlyList<int> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        if (candidates.Count == 0)
+        {
+            throw new ArgumentException("Need at least one candidate.", nameof(candidates));
+        }
+
+        var candidateLab = new CieLab[candidates.Count];
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            candidateLab[i] = paletteLab[candidates[i]];
+        }
+
+        var indices = new int[cellLab.Length];
+        for (int i = 0; i < cellLab.Length; i++)
+        {
+            indices[i] = candidates[NearestIndex(cellLab[i], candidateLab)];
+        }
+
+        return indices;
+    }
+
+    /// <summary>
     /// Converts cells once and keeps them. Every cell is measured against the palette repeatedly —
     /// once to map, then once per round of the colour reduction — and the conversion is the
     /// expensive half of that.
