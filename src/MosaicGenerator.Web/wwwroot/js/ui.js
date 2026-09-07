@@ -112,6 +112,7 @@
 
         var img = document.querySelector('[data-cartoon-img]');
         var download = document.querySelector('[data-cartoon-download]');
+        var pdf = document.querySelector('[data-cartoon-pdf]');
         var label = step.querySelector('[data-step-label]');
         var hint = step.querySelector('[data-step-hint]');
         var body = document.querySelector('[data-consumption-body]');
@@ -119,6 +120,7 @@
         var regenerate = document.getElementById('regenerate');
         var cartoonUrl = step.dataset.cartoonUrl;
         var downloadUrl = step.dataset.downloadUrl;
+        var pdfUrl = step.dataset.pdfUrl;
 
         var current = data.chosen;
 
@@ -203,6 +205,7 @@
                 var q = '?c=' + n;
                 if (img) { img.src = cartoonUrl + q; }
                 if (download) { download.href = downloadUrl + '&c=' + n; }
+                if (pdf) { pdf.href = pdfUrl + '?c=' + n; }
                 renderTable(rung);
                 hint.textContent = n === data.auto ? 'авто'
                     : (n > data.auto ? 'больше авто (' + data.auto + ')' : 'меньше авто (' + data.auto + ')');

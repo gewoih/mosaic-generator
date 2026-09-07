@@ -109,7 +109,8 @@
             <div class="tabpanel" role="tabpanel" data-panel="cartoon">
                 <div class="color-step" data-color-step
                      data-cartoon-url="@Url.Action("Cartoon", new { id })"
-                     data-download-url="@Url.Action("Cartoon", new { id, download = true })">
+                     data-download-url="@Url.Action("Cartoon", new { id, download = true })"
+                     data-pdf-url="@Url.Action("CartoonPdf", new { id })">
                     <button type="button" class="button button--small" data-step="-1" aria-label="Меньше цветов">◄</button>
                     <span class="color-step__label" data-step-label>@stored.ChosenColors цв.</span>
                     <button type="button" class="button button--small" data-step="1" aria-label="Больше цветов">►</button>
@@ -119,6 +120,7 @@
                 <div class="tabpanel__bar">
                     <span class="dims">@stored.CartoonWidthPx × @stored.CartoonHeightPx px · @stored.CartoonDpi.ToString("0", ru) dpi</span>
                     <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })" data-cartoon-download>Скачать PNG</a>
+                    <a class="button button--small" href="@Url.Action("CartoonPdf", new { id })" data-cartoon-pdf>Печать A4 (PDF)</a>
                 </div>
             </div>
 

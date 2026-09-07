@@ -6,6 +6,7 @@ using MosaicGenerator.Core.Domain;
 using MosaicGenerator.Core.Imaging;
 using MosaicGenerator.Core.Material;
 using MosaicGenerator.Core.Pipeline;
+using MosaicGenerator.Core.Skia;
 using MosaicGenerator.Core.Validation;
 using MosaicGenerator.Web.Models;
 using MosaicGenerator.Web.Options;
@@ -204,6 +205,32 @@ public sealed class MosaicController(
     [HttpGet("result/{id}/scheme.png")]
     public IActionResult Scheme(string id, bool download = false) =>
         Image(id, ResultImage.Scheme, download, "shema.png");
+
+    /// <summary>
+    /// The cartoon laid across A4 pages for 1:1 printing: a panel wider than a sheet is cut, and
+    /// the pages carry registration marks and a glue overlap. Same shade-count fallback as
+    /// <see cref="Cartoon"/>.
+    /// </summary>
+    [HttpGet("result/{id}/cartoon.pdf")]
+    public IActionResult CartoonPdf(string id, int? c = null)
+    {
+        byte[]? png = c is { } colors ? results.ReadLadderCartoon(id, colors) : null;
+        png ??= results.ReadImage(id, ResultImage.Cartoon);
+
+        return png is null
+            ? NotFound()
+            : File(SkiaPdfTiler.Render(png, "Картон"), "application/pdf", "karton-a4.pdf");
+    }
+
+    [HttpGet("result/{id}/scheme.pdf")]
+    public IActionResult SchemePdf(string id)
+    {
+        byte[]? png = results.ReadImage(id, ResultImage.Scheme);
+
+        return png is null
+            ? NotFound()
+            : File(SkiaPdfTiler.Render(png, "Схема"), "application/pdf", "shema-a4.pdf");
+    }
 
     [HttpGet("result/{id}/legend.png")]
     public IActionResult Legend(string id, bool download = false) =>
