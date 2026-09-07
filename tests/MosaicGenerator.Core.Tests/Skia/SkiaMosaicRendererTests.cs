@@ -94,7 +94,8 @@ public class SkiaMosaicRendererTests
     {
         MosaicPlan plan = PlanFactory.Striped(seed: 5);
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 1500m);
-        CartoonLegend legend = CartoonLegend.Layout(report);
+        using var font = new SKFont(SchemeFont.Typeface, (float)CartoonLegend.LabelFontSizePx);
+        CartoonLegend legend = CartoonLegend.Layout(report, label => font.MeasureText(label));
 
         using SKBitmap decoded = SKBitmap.Decode(_renderer.RenderLegend(report))!;
 
