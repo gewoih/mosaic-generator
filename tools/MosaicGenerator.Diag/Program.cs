@@ -58,6 +58,9 @@ internal static class Program
         // the placer log every attempt.
         bool autopsy = args.Contains("--why");
 
+        // Снятый цвет каждой клетки и поставленный артикул, в <прогон>-cells.csv.
+        bool cellsDump = args.Contains("--cells");
+
         // Where the wide gaps sit, drawn (TODO п. 4). The numbers say how much and how wide; this
         // says what shape the defect has on the work. The threshold is an argument because the
         // default 3 mm draws only the tail: the body of the defect is the field of adhesive between
@@ -74,7 +77,7 @@ internal static class Program
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
                 "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
                 "[--metric cie76|ciede2000] [--flatten off|r,dE,n,across] " +
-                "[--why] [--holes] [--holes-mm 2.0]");
+                "[--why] [--holes] [--holes-mm 2.0] [--cells]");
             return 1;
         }
 
@@ -224,6 +227,22 @@ internal static class Program
 
             File.WriteAllText(
                 Path.Combine(outDir, $"{run.Name}-indices.txt"), string.Join(',', indices));
+
+            // Что матчер получил на вход: снятый цвет каждой клетки рядом с поставленным
+            // артикулом. Без этого вопрос «почему тут этот артикул» решается гаданием — трижды
+            // решался (docs/tsvetnoy-obodok-plan.md, docs/neytralnaya-tsel-plan.md).
+            if (cellsDump)
+            {
+                var dump = new StringBuilder("i,L,a,b,C,article\n");
+                for (int c = 0; c < cells.Length; c++)
+                {
+                    CieLab cl = cells[c].ToLab();
+                    dump.Append(string.Create(CultureInfo.InvariantCulture,
+                        $"{c},{cl.L:0.###},{cl.A:0.###},{cl.B:0.###},{Math.Sqrt(cl.A * cl.A + cl.B * cl.B):0.###},{palette.Colors[indices[c]].Article}\n"));
+                }
+
+                File.WriteAllText(Path.Combine(outDir, $"{run.Name}-cells.csv"), dump.ToString());
+            }
 
             int[] lengths = [.. tesserae.Where(t => t.CourseId >= 0)
                 .GroupBy(t => t.CourseId).Select(g => g.Count()).Order()];
