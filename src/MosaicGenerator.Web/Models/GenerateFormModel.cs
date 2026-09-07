@@ -57,6 +57,13 @@ public sealed class GenerateFormModel
     [Range(2, 100, ErrorMessage = "Максимум цветов: от 2 до 100.")]
     public int MaxColors { get; set; } = 8;
 
+    /// <summary>
+    /// Exact shade count, set only when the mosaicist steps the count on the result page past the
+    /// range baked for the arrows and asks for a full regeneration there. Zero leaves the choice to
+    /// the automatic knee search.
+    /// </summary>
+    public int ForceColors { get; set; }
+
     [Display(Name = "Запас на отходы, %")]
     [Range(0, 100, ErrorMessage = "Запас на отходы: от 0 до 100 %.")]
     public double WastePercent { get; set; } = 25;
@@ -93,6 +100,7 @@ public sealed class GenerateFormModel
             PinnedArticles = PinnedArticles,
             PaletteId = PaletteId,
             MaxColors = MaxColors,
+            ForceColors = ForceColors,
             WastePercent = WastePercent,
             PricePerKgRub = PricePerKgRub,
         };

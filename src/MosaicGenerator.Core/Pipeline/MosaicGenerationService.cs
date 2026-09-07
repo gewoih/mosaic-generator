@@ -22,6 +22,9 @@ public sealed class MosaicGenerationService(
     private readonly IMosaicRenderer _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
     private readonly MosaicGenerationOptions _options = options ?? throw new ArgumentNullException(nameof(options));
 
+    /// <summary>How far either side of the automatic pick the on-page arrows can step without a round trip.</summary>
+    private const int LadderReach = 5;
+
     public MosaicResult Generate(Stream photo, MosaicRequest request, Palette palette)
     {
         ArgumentNullException.ThrowIfNull(photo);
@@ -36,6 +39,83 @@ public sealed class MosaicGenerationService(
                 $"Invalid request: {string.Join("; ", errors.Select(e => e.Message))}", nameof(request));
         }
 
+        Prepared context = Prepare(photo, request, palette);
+
+        // The ladder is built down past the ceiling so the knee search has cheap rungs to measure a
+        // median against; 4 is the floor the pick itself will never go below.
+        int floor = Math.Clamp(Math.Min(4, request.MaxColors), 1, context.PaletteLab.Length);
+        ReductionLadder ladder = PaletteReducer.BuildLadder(
+            context.MappedLab, context.Indices, context.PaletteLab, floor,
+            context.Pinned, context.Tesserae, context.Neighbourhood);
+
+        ColorLadderPick pick = ladder.Knee(request.MaxColors);
+
+        int chosen = request.ForceColors > 0
+            ? Math.Clamp(request.ForceColors, ladder.Floor.ColorCount, ladder.Rungs[0].ColorCount)
+            : pick.Colors;
+
+        Rendered main = RenderAt(context, ladder.RungAt(chosen), full: true);
+
+        var baked = new List<ColorLadderRung>();
+        if (_options.BakeColorLadder)
+        {
+            int top = ladder.Rungs[0].ColorCount;
+            int bottom = ladder.Floor.ColorCount;
+            int from = Math.Max(Math.Max(bottom, 2), chosen - LadderReach);
+            int to = Math.Min(Math.Min(top, request.MaxColors), chosen + LadderReach);
+
+            for (int n = from; n <= to; n++)
+            {
+                ReductionRung rung = ladder.RungAt(n);
+                Rendered rendered = n == chosen ? main : RenderAt(context, rung, full: false);
+                baked.Add(new ColorLadderRung
+                {
+                    ColorCount = n,
+                    CartoonPng = rendered.CartoonPng,
+                    CartoonSheetHeightPx = rendered.CartoonSheetHeightPx,
+                    Report = rendered.Report,
+                    ModulesReassigned = rung.ModulesReassigned,
+                });
+            }
+        }
+
+        ReductionRung chosenRung = ladder.RungAt(chosen);
+
+        return new MosaicResult
+        {
+            CartoonPng = main.CartoonPng,
+            SchemePng = main.SchemePng!,
+            LegendPng = main.LegendPng!,
+            CartoonSheetHeightPx = main.CartoonSheetHeightPx,
+            Report = main.Report,
+            Layout = context.Layout,
+            Palette = palette,
+            Cartoon = main.Cartoon,
+            Scheme = main.Scheme!,
+            ColorsBeforeReduction = ladder.ColorsBefore,
+            AutoColors = pick.Colors,
+            ChosenColors = chosen,
+            ColorCeiling = request.MaxColors,
+            KneeRatio = pick.KneeRatio,
+            ColorLadder = baked,
+            ModulesReassigned = chosenRung.ModulesReassigned,
+            SettledAfterReduction = main.SettledAfterReduction,
+            SettledAfterReductionOnMoved = main.SettledAfterReductionOnMoved,
+            StoppedAtPinnedColors = ladder.StoppedAtPinnedColors,
+            TesseraCount = context.Tesserae.Count,
+            CutTesseraCount = context.Tesserae.Count(t => t.IsCut),
+        };
+    }
+
+    /// <summary>
+    /// Everything the layout needs before a shade count is chosen: crop, direction field,
+    /// tessellation, sampling, the tonal passes, the first quantisation and the first
+    /// <see cref="CoherentMap"/>. None of it reads <see cref="MosaicRequest.MaxColors"/> or the
+    /// pins, and <see cref="MosaicRequest.EffectiveSeed"/> does not hash them either — so the
+    /// prefix is computed once and every rung of the colour ladder shares it.
+    /// </summary>
+    private Prepared Prepare(Stream photo, MosaicRequest request, Palette palette)
+    {
         SourceImage image = _imageLoader.Load(photo, _options.ImageLimits);
         MosaicLayout layout = MosaicLayout.Compute(request);
 
@@ -65,117 +145,112 @@ public sealed class MosaicGenerationService(
         CieLab[] cellLab = Quantizer.ToLab(cells);
 
         // Matching against the shades as they are in the hand, not as the joint will show them.
-        // Compensating the match for the joint was measured over 48 runs — eight photographs,
-        // three sizes, two bites — and scored on its own yardstick, the panel as the wall shows
-        // it, which it optimises directly and so ought to win outright. It won 24 of 48: a coin
-        // flip, median gain 0,01 ΔE, and the four photographs it helped were the three gulls and
-        // the dolphin. What it cost was visible — a near-neutral target makes the correction reach
-        // for a lighter *and* more saturated article, which is how a dolphin's grey back came out
-        // in pink smalt. It could not win because `paletteLab` is two things at once: the space the
-        // match runs in, where the correction belongs, and the range ToneMap stretches the
-        // photograph into, where it does not — the stretch into a compressed range and the reach
-        // back out of it cancel. See docs/tsvetnoy-obodok-plan.md.
+        // See docs/tsvetnoy-obodok-plan.md for why the joint compensation was measured and dropped.
         CieLab[] paletteLab = PaletteObservation.Lab(palette);
 
-        // The photograph is laid out in the range the material has before a shade is chosen. Matching
-        // the camera's tones directly is accurate and flat: on the gull it put one article over 71 %
-        // of the panel because the whole sky sat inside less than one step of the range.
-        //
-        // Settling first is not optional. Spreading multiplies whatever variation is present, and in
-        // a crowded sky that is mostly texture — spread unsettled, it comes out as speckle.
+        // The photograph is laid out in the range the material has before a shade is chosen.
+        // Settling first is not optional: spreading multiplies whatever variation is present, and
+        // in a crowded sky that is mostly texture.
         CellNeighbourhood neighbourhood = CellNeighbourhood.Build(tesserae, layout);
         CieLab[] settledLab = CellSmoother.Settle(cellLab, neighbourhood);
 
         // The tonal step ToneMap fades out below is taken from the palette's own tonal density, not
-        // from request.MaxColors — the article ceiling has nothing to do with how hard to open the
-        // photograph's tones. See docs/14-maxcolors-dve-veshchi-plan.md (TODO п. 14).
+        // from request.MaxColors — see docs/14-maxcolors-dve-veshchi-plan.md (TODO п. 14).
         CieLab[] stretchedLab = ToneMap.IntoPaletteRange(settledLab, paletteLab);
 
-        // Spreading the whole picture cannot separate what the picture never separated: haze puts a
-        // far ridge and the sky behind it inside one tonal step, and there the cartoon has to lie on
-        // purpose, the way a mosaicist does by hand. Last of the three, not before the stretch —
-        // the stretch multiplies whatever it is handed, noise included, and that was measured.
-        // See docs/lokalnyy-kontrast-plan.md.
+        // Spreading the whole picture cannot separate what the picture never separated. Last of the
+        // three, not before the stretch. See docs/lokalnyy-kontrast-plan.md.
         CieLab[] mappedLab = LocalContrast.Lift(
             stretchedLab, CellNeighbourhood.Build(tesserae, LocalContrast.ReachFor(layout)));
 
-        // Against the cluster representatives, not the whole palette: articles too close to tell
-        // apart share one representative, so two indistinguishable articles can never both be
-        // picked into one cartoon, and the quantiser is not left to split a shade it will only
-        // have to merge back. See docs/redukciya-svyazka-plan.md (TODO п. 15).
+        // Against the cluster representatives, not the whole palette — see
+        // docs/redukciya-svyazka-plan.md (TODO п. 15).
         IReadOnlyList<int> candidateColors = palette.RepresentativeIndices;
         int[] indices = Quantizer.Map(mappedLab, paletteLab, candidateColors);
 
-        // Quantizer picked each cell's nearest shade on its own, with no notion of what the
-        // neighbours around it picked. ToneMap's spread is what turns a couple of ΔE of noise into
-        // a jump onto a differently saturated article, so this settles the choice against nearby
-        // cells before anything downstream treats it as final — see docs/krap-tona-plan.md.
+        // Quantizer picked each cell's nearest shade on its own; this settles the choice against
+        // nearby cells before anything downstream treats it as final — see docs/krap-tona-plan.md.
         indices = CoherentMap.Settle(mappedLab, paletteLab, indices, candidateColors, neighbourhood);
 
-        // The reducer now hands the cells of each dropped shade to survivors with an eye on what
-        // their neighbours settled on — sharing the same neighbourhood — rather than one
-        // nearest-shade lookup each. That point-by-point hand-out was the main way the settling
-        // above got undone (TODO п. 13, docs/redukciya-svyazka-plan.md).
-        ReductionOutcome reduction = PaletteReducer.Reduce(
-            mappedLab, indices, paletteLab, request.MaxColors,
-            PinnedIndices(palette, request.PinnedArticles), tesserae, neighbourhood);
+        return new Prepared
+        {
+            Request = request,
+            Palette = palette,
+            Layout = layout,
+            Tesserae = tesserae,
+            Neighbourhood = neighbourhood,
+            MappedLab = mappedLab,
+            PaletteLab = paletteLab,
+            Indices = indices,
+            Pinned = PinnedIndices(palette, request.PinnedArticles),
+        };
+    }
 
-        // A settling pass against the reduced palette. Not the first pass run twice, which is how
-        // TODO п. 13 read it before it was measured: the first pass settles against 138 cluster
-        // representatives, this one against the dozen articles the cartoon actually keeps, and it
-        // is the only place the layout is agreed against the final set. Measured over 33 runs
-        // (docs/redukciya-svyazka-plan.md §11): it moves 0,89 % of the pieces, and 54 % of those
-        // the reducer never touched — a piece whose own article survived can be left with no
-        // same-article neighbour once the shades around it are handed out, and no fix inside
-        // PaletteReducer can reach it. Dropping this pass took loud singles from 0,0013 to 0,0026
-        // and lost the blue candle on human 40×40.
+    /// <summary>
+    /// The tail from one rung of the ladder: a settling pass against the reduced palette, then the
+    /// material report and the renders. Only the chosen rung asks for the numbered scheme and the
+    /// legend — those carry per-shade numbers a stepped count would invalidate.
+    /// </summary>
+    private Rendered RenderAt(Prepared context, ReductionRung rung, bool full)
+    {
+        // A settling pass against the reduced palette — the only place the layout is agreed against
+        // the final set. Measured over 33 runs (docs/redukciya-svyazka-plan.md §11).
         int[] finalIndices = CoherentMap.Settle(
-            mappedLab, paletteLab, reduction.Indices, reduction.RetainedColors, neighbourhood);
+            context.MappedLab, context.PaletteLab, rung.Indices, rung.RetainedColors, context.Neighbourhood);
 
-        // Diagnostic only — nothing downstream reads these, and counting them changes no tessera.
-        // They are the sentry on the settled question of TODO п. 13: a piece this pass moves that
-        // the reducer never touched was never an orphan, so its disagreement cannot have come from
-        // the hand-out. Should the hand-out start coming apart, the second count rises.
+        // Diagnostic only — the sentry on TODO п. 13: a piece this pass moves that the reducer
+        // never touched was never an orphan, so its disagreement is not the hand-out's fault.
         int settledAfterReduction = 0;
         int settledAfterReductionOnMoved = 0;
         for (int cell = 0; cell < finalIndices.Length; cell++)
         {
-            if (finalIndices[cell] == reduction.Indices[cell])
+            if (finalIndices[cell] == rung.Indices[cell])
             {
                 continue;
             }
 
             settledAfterReduction++;
-            if (reduction.Indices[cell] != indices[cell])
+            if (rung.Indices[cell] != context.Indices[cell])
             {
                 settledAfterReductionOnMoved++;
             }
         }
 
-        var plan = new MosaicPlan(layout, palette, finalIndices, request.EffectiveSeed, tesserae);
-        MaterialReport report = MaterialCalculator.Calculate(plan, request.WasteFactor, request.PricePerKgRub);
+        var plan = new MosaicPlan(
+            context.Layout, context.Palette, finalIndices, context.Request.EffectiveSeed, context.Tesserae);
+        MaterialReport report = MaterialCalculator.Calculate(
+            plan, context.Request.WasteFactor, context.Request.PricePerKgRub);
 
-        RenderPlan cartoon = RenderGeometry.Compute(plan, _options.Cartoon);
-        RenderPlan scheme = RenderGeometry.Compute(plan, _options.Scheme);
+        RenderPlan cartoonGeometry = RenderGeometry.Compute(plan, _options.Cartoon);
+        byte[] cartoonPng = _renderer.RenderCartoon(cartoonGeometry);
+        int sheetHeight = CartoonSheet.Layout(cartoonGeometry).HeightPx;
 
-        return new MosaicResult
+        if (!full)
         {
-            CartoonPng = _renderer.RenderCartoon(cartoon),
-            SchemePng = _renderer.RenderScheme(scheme, report),
-            LegendPng = _renderer.RenderLegend(report),
-            CartoonSheetHeightPx = CartoonSheet.Layout(cartoon).HeightPx,
+            return new Rendered
+            {
+                CartoonPng = cartoonPng,
+                CartoonSheetHeightPx = sheetHeight,
+                Cartoon = cartoonGeometry,
+                Report = report,
+                SettledAfterReduction = settledAfterReduction,
+                SettledAfterReductionOnMoved = settledAfterReductionOnMoved,
+            };
+        }
+
+        RenderPlan schemeGeometry = RenderGeometry.Compute(plan, _options.Scheme);
+
+        return new Rendered
+        {
+            CartoonPng = cartoonPng,
+            CartoonSheetHeightPx = sheetHeight,
+            Cartoon = cartoonGeometry,
             Report = report,
-            Layout = layout,
-            Palette = palette,
-            Cartoon = cartoon,
-            Scheme = scheme,
-            ColorsBeforeReduction = reduction.ColorsBefore,
-            ModulesReassigned = reduction.ModulesReassigned,
+            Scheme = schemeGeometry,
+            SchemePng = _renderer.RenderScheme(schemeGeometry, report),
+            LegendPng = _renderer.RenderLegend(report),
             SettledAfterReduction = settledAfterReduction,
             SettledAfterReductionOnMoved = settledAfterReductionOnMoved,
-            StoppedAtPinnedColors = reduction.StoppedAtPinnedColors,
-            TesseraCount = tesserae.Count,
-            CutTesseraCount = tesserae.Count(t => t.IsCut),
         };
     }
 
@@ -202,5 +277,50 @@ public sealed class MosaicGenerationService(
         }
 
         return indices.Count > 0 ? indices : null;
+    }
+
+    /// <summary>The pipeline prefix, computed once and shared by every rung of the colour ladder.</summary>
+    private sealed record Prepared
+    {
+        public required MosaicRequest Request { get; init; }
+
+        public required Palette Palette { get; init; }
+
+        public required MosaicLayout Layout { get; init; }
+
+        public required IReadOnlyList<Tessera> Tesserae { get; init; }
+
+        public required CellNeighbourhood Neighbourhood { get; init; }
+
+        public required CieLab[] MappedLab { get; init; }
+
+        public required CieLab[] PaletteLab { get; init; }
+
+        /// <summary>The mapping after the first <see cref="CoherentMap"/> pass, before any reduction.</summary>
+        public required int[] Indices { get; init; }
+
+        public required IReadOnlySet<int>? Pinned { get; init; }
+    }
+
+    /// <summary>The output of <see cref="RenderAt"/>. Scheme and legend are set only for the chosen rung.</summary>
+    private sealed record Rendered
+    {
+        public required byte[] CartoonPng { get; init; }
+
+        public required int CartoonSheetHeightPx { get; init; }
+
+        public required RenderPlan Cartoon { get; init; }
+
+        public required MaterialReport Report { get; init; }
+
+        public RenderPlan? Scheme { get; init; }
+
+        public byte[]? SchemePng { get; init; }
+
+        public byte[]? LegendPng { get; init; }
+
+        public required int SettledAfterReduction { get; init; }
+
+        public required int SettledAfterReductionOnMoved { get; init; }
     }
 }

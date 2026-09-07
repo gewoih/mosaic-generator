@@ -62,8 +62,40 @@ public static class PaletteReducer
         IReadOnlyList<Tessera>? tesserae = null,
         CellNeighbourhood? neighbourhood = null)
     {
-        ArgumentNullException.ThrowIfNull(indices);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxColors, 1);
+
+        ReductionLadder ladder = BuildLadder(
+            cellLab, indices, paletteLab, maxColors, pinned, tesserae, neighbourhood);
+        ReductionRung stop = ladder.Rungs[^1];
+
+        return new ReductionOutcome
+        {
+            Indices = stop.Indices,
+            ColorsBefore = ladder.ColorsBefore,
+            ColorsAfter = stop.ColorCount,
+            ModulesReassigned = stop.ModulesReassigned,
+            RetainedColors = stop.RetainedColors,
+            StoppedAtPinnedColors = ladder.StoppedAtPinnedColors,
+        };
+    }
+
+    /// <summary>
+    /// The whole cost curve in one nested pass: keep every shade, then drop the cheapest, then the
+    /// next, down to <paramref name="floor"/>, recording after each drop what it cost and the
+    /// mapping it left. The greedy drop is monotone-nested, so this is exactly what a stack of
+    /// <see cref="Reduce"/> calls would produce, at the price of one.
+    /// </summary>
+    public static ReductionLadder BuildLadder(
+        ReadOnlySpan<CieLab> cellLab,
+        int[] indices,
+        ReadOnlySpan<CieLab> paletteLab,
+        int floor,
+        IReadOnlySet<int>? pinned,
+        IReadOnlyList<Tessera>? tesserae = null,
+        CellNeighbourhood? neighbourhood = null)
+    {
+        ArgumentNullException.ThrowIfNull(indices);
+        ArgumentOutOfRangeException.ThrowIfLessThan(floor, 1);
 
         // Adjacency between cells, so a shade gathered into a compact blob — an eye, a catchlight —
         // costs more to lose than the same tessera count scattered across the panel.
@@ -88,29 +120,43 @@ public static class PaletteReducer
         }
 
         int colorsBefore = cellsByColor.Count;
-        if (colorsBefore <= maxColors)
+        var rungs = new List<ReductionRung>();
+
+        if (colorsBefore <= floor)
         {
-            return new ReductionOutcome
+            rungs.Add(new ReductionRung
             {
-                Indices = indices,
-                ColorsBefore = colorsBefore,
-                ColorsAfter = colorsBefore,
+                ColorCount = colorsBefore,
+                MarginalCost = 0.0,
                 ModulesReassigned = 0,
+                Indices = indices,
                 RetainedColors = [.. cellsByColor.Keys],
-            };
+            });
+
+            return new ReductionLadder { Rungs = rungs, ColorsBefore = colorsBefore };
         }
 
         var reduced = (int[])indices.Clone();
         HashSet<int> retained = [.. cellsByColor.Keys];
         bool stoppedAtPinned = false;
 
-        while (retained.Count > maxColors)
+        rungs.Add(new ReductionRung
+        {
+            ColorCount = retained.Count,
+            MarginalCost = 0.0,
+            ModulesReassigned = 0,
+            Indices = (int[])reduced.Clone(),
+            RetainedColors = [.. retained.Order()],
+        });
+
+        while (retained.Count > floor)
         {
             // Sorted so the sweep visits candidates in a fixed order and ties break the same way
             // on every run.
             int[] survivors = [.. retained.Order()];
 
-            int victim = CheapestToDrop(cellLab, reduced, paletteLab, survivors, pinned, adjacency);
+            int victim = CheapestToDrop(
+                cellLab, reduced, paletteLab, survivors, pinned, adjacency, out double victimCost);
             if (victim < 0)
             {
                 // Everything still standing is pinned.
@@ -151,27 +197,33 @@ public static class PaletteReducer
                     cellsByColor[reduced[cell]].Add(cell);
                 }
             }
-        }
 
-        // Counted against the original mapping rather than accumulated per round: a cell whose
-        // replacement is itself discarded later moves twice, but it is still one module that
-        // ended up somewhere other than where it started.
-        int reassigned = 0;
-        for (int cell = 0; cell < reduced.Length; cell++)
-        {
-            if (reduced[cell] != indices[cell])
+            // Counted against the original mapping rather than accumulated per round: a cell whose
+            // replacement is itself discarded later moves twice, but it is still one module that
+            // ended up somewhere other than where it started.
+            int reassigned = 0;
+            for (int cell = 0; cell < reduced.Length; cell++)
             {
-                reassigned++;
+                if (reduced[cell] != indices[cell])
+                {
+                    reassigned++;
+                }
             }
+
+            rungs.Add(new ReductionRung
+            {
+                ColorCount = retained.Count,
+                MarginalCost = victimCost,
+                ModulesReassigned = reassigned,
+                Indices = (int[])reduced.Clone(),
+                RetainedColors = [.. retained.Order()],
+            });
         }
 
-        return new ReductionOutcome
+        return new ReductionLadder
         {
-            Indices = reduced,
+            Rungs = rungs,
             ColorsBefore = colorsBefore,
-            ColorsAfter = retained.Count,
-            ModulesReassigned = reassigned,
-            RetainedColors = [.. retained.Order()],
             StoppedAtPinnedColors = stoppedAtPinned,
         };
     }
@@ -283,7 +335,8 @@ public static class PaletteReducer
         ReadOnlySpan<CieLab> paletteLab,
         int[] survivors,
         IReadOnlySet<int>? pinned,
-        CellNeighbourhood? adjacency)
+        CellNeighbourhood? adjacency,
+        out double cheapestCost)
     {
         var cost = new Dictionary<int, double>(survivors.Length);
         foreach (int color in survivors)
@@ -345,6 +398,7 @@ public static class PaletteReducer
             }
         }
 
+        cheapestCost = victim >= 0 ? cheapest : 0.0;
         return victim;
     }
 

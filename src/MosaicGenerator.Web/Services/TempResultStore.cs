@@ -35,9 +35,15 @@ public sealed class TempResultStore : IResultStore
         Directory.CreateDirectory(_root);
     }
 
-    public string Save(StoredResult result, byte[] cartoonPng, byte[] schemePng, byte[] legendPng)
+    public string Save(
+        StoredResult result,
+        byte[] cartoonPng,
+        byte[] schemePng,
+        byte[] legendPng,
+        IReadOnlyDictionary<int, byte[]> ladderCartoons)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(ladderCartoons);
 
         Sweep();
 
@@ -48,6 +54,11 @@ public sealed class TempResultStore : IResultStore
         File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Cartoon)), cartoonPng);
         File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Scheme)), schemePng);
         File.WriteAllBytes(Path.Combine(directory, FileNameFor(ResultImage.Legend)), legendPng);
+        foreach ((int colors, byte[] png) in ladderCartoons)
+        {
+            File.WriteAllBytes(Path.Combine(directory, LadderCartoonName(colors)), png);
+        }
+
         File.WriteAllText(
             Path.Combine(directory, ManifestFileName),
             JsonSerializer.Serialize(result, SerializerOptions));
@@ -75,6 +86,18 @@ public sealed class TempResultStore : IResultStore
 
     public byte[]? ReadImage(string id, ResultImage image) =>
         TryResolve(id, FileNameFor(image), out string? path) ? File.ReadAllBytes(path) : null;
+
+    public byte[]? ReadLadderCartoon(string id, int colors)
+    {
+        if (colors is < 1 or > 999)
+        {
+            return null;
+        }
+
+        return TryResolve(id, LadderCartoonName(colors), out string? path) ? File.ReadAllBytes(path) : null;
+    }
+
+    private static string LadderCartoonName(int colors) => $"cartoon-c{colors}.png";
 
     private static string FileNameFor(ResultImage image) => image switch
     {

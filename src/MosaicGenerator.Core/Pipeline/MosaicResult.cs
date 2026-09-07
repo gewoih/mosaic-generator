@@ -30,6 +30,34 @@ public sealed record MosaicResult
     /// <summary>Shades the quantiser picked before the layout was trimmed to the colour ceiling.</summary>
     public required int ColorsBeforeReduction { get; init; }
 
+    /// <summary>
+    /// Shades the knee search settled on for this panel — the number of colours a further shade
+    /// dropped starts costing the subject rather than the background.
+    /// </summary>
+    public required int AutoColors { get; init; }
+
+    /// <summary>
+    /// Shades actually rendered: <see cref="AutoColors"/>, unless the mosaicist forced an exact
+    /// count from the result page.
+    /// </summary>
+    public required int ChosenColors { get; init; }
+
+    /// <summary>The colour ceiling from the request — the automatic pick never exceeds it.</summary>
+    public required int ColorCeiling { get; init; }
+
+    /// <summary>
+    /// The ratio the knee search decided on: the first drop dearer than
+    /// <see cref="Quantization.ReductionLadder.KneeFactor"/> times the running median. Below the
+    /// factor when no knee was found and the pick fell back to the ceiling.
+    /// </summary>
+    public required double KneeRatio { get; init; }
+
+    /// <summary>
+    /// A cartoon and a material table per shade count around <see cref="ChosenColors"/>, so the
+    /// result page can step through them with no round trip. Empty when the ladder was not baked.
+    /// </summary>
+    public required IReadOnlyList<ColorLadderRung> ColorLadder { get; init; }
+
     /// <summary>Modules that ended up on a different shade than the quantiser first chose.</summary>
     public required int ModulesReassigned { get; init; }
 
@@ -54,4 +82,23 @@ public sealed record MosaicResult
 
     /// <summary>Of those, how many are partial — clipped by the field edge or a contour.</summary>
     public required int CutTesseraCount { get; init; }
+}
+
+/// <summary>
+/// One step of the colour ladder as the result page needs it: the cartoon at that shade count and
+/// the material table that goes with it. The numbered scheme and the legend are not baked — they
+/// carry per-shade numbers, so stepping the count needs a full regeneration for those.
+/// </summary>
+public sealed record ColorLadderRung
+{
+    public required int ColorCount { get; init; }
+
+    public required byte[] CartoonPng { get; init; }
+
+    public required int CartoonSheetHeightPx { get; init; }
+
+    public required MaterialReport Report { get; init; }
+
+    /// <summary>Modules on a different shade than the quantiser first chose, at this rung.</summary>
+    public required int ModulesReassigned { get; init; }
 }

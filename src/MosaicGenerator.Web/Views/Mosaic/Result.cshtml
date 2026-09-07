@@ -6,6 +6,46 @@
     CultureInfo ru = CultureInfo.GetCultureInfo("ru-RU");
     var pinned = new HashSet<string>(stored.PinnedArticles, StringComparer.OrdinalIgnoreCase);
     bool reduced = stored.ColorsBeforeReduction > stored.Lines.Count;
+
+    int ladderMin = stored.ColorLadder.Count > 0 ? stored.ColorLadder.Min(r => r.ColorCount) : stored.Lines.Count;
+    int ladderMax = stored.ColorLadder.Count > 0 ? stored.ColorLadder.Max(r => r.ColorCount) : stored.Lines.Count;
+    // How far down and up the arrows may step at all — inside [ladderMin, ladderMax] the swap is
+    // instant, outside it the page asks for a full regeneration at that number.
+    int arrowMin = 2;
+    int arrowMax = Math.Max(stored.ChosenColors, Math.Min(stored.ColorCeiling, stored.ColorsBeforeReduction));
+
+    string ladderJson = JsonSerializer.Serialize(new
+    {
+        chosen = stored.ChosenColors,
+        auto = stored.AutoColors,
+        ceiling = stored.ColorCeiling,
+        before = stored.ColorsBeforeReduction,
+        total = stored.TotalModules,
+        bakedMin = ladderMin,
+        bakedMax = ladderMax,
+        arrowMin,
+        arrowMax,
+        rungs = stored.ColorLadder.ToDictionary(
+            r => r.ColorCount.ToString(CultureInfo.InvariantCulture),
+            r => new
+            {
+                reassigned = r.ModulesReassigned,
+                area = r.TotalGrossAreaM2,
+                mass = r.TotalMassKg,
+                cost = r.TotalCost,
+                lines = r.Lines.Select(l => new
+                {
+                    code = l.Code,
+                    hold = l.Article,
+                    name = l.Name,
+                    hex = l.Hex,
+                    count = l.ModuleCount,
+                    area = l.GrossAreaM2,
+                    mass = l.MassKg,
+                    cost = l.Cost,
+                }),
+            }),
+    });
 }
 
 <div class="workbench">
@@ -14,6 +54,7 @@
         @Html.AntiForgeryToken()
         <div asp-validation-summary="All" class="errors"></div>
         <input type="hidden" name="SourceId" value="@stored.SourceId" />
+        <input type="hidden" name="ForceColors" value="0" data-force-colors />
 
         <details class="crop-fold">
             <summary>Кадр</summary>
@@ -37,7 +78,7 @@
             <span>·</span>
             откус @stored.ModuleSizeMm.ToString("0.#", ru) / шов @stored.GroutWidthMm.ToString("0.#", ru) мм
             <span>·</span>
-            @stored.Lines.Count цв.
+            <span data-color-count>@stored.Lines.Count</span> цв.
         </div>
 
         @if (stored.StoppedAtPinnedColors)
@@ -47,10 +88,14 @@
         @if (reduced)
         {
             double share = (double)stored.ModulesReassigned / stored.TotalModules * 100;
-            <p class="callout">
-                Свёрнуто @(stored.ColorsBeforeReduction - stored.Lines.Count) оттенков при лимите
-                @stored.MaxColors: переназначено @stored.ModulesReassigned из
-                @stored.TotalModules.ToString("N0", ru) модулей (@share.ToString("0.#", ru) %).
+            string picked = stored.ChosenColors == stored.AutoColors
+                ? $"взял {stored.ChosenColors} цветов из {stored.ColorCeiling}"
+                : $"задано вручную {stored.ChosenColors} цветов (авто предлагал {stored.AutoColors} из {stored.ColorCeiling})";
+            <p class="callout" data-reduction-note>
+                @picked: свёрнуто @(stored.ColorsBeforeReduction - stored.Lines.Count) оттенков,
+                переназначено <span data-reassigned>@stored.ModulesReassigned.ToString("N0", ru)</span> из
+                @stored.TotalModules.ToString("N0", ru) модулей
+                (<span data-reassigned-share>@share.ToString("0.#", ru)</span> %).
             </p>
         }
 
@@ -62,10 +107,18 @@
             </div>
 
             <div class="tabpanel" role="tabpanel" data-panel="cartoon">
-                <img src="@Url.Action("Cartoon", new { id })" alt="Картон под набор" />
+                <div class="color-step" data-color-step
+                     data-cartoon-url="@Url.Action("Cartoon", new { id })"
+                     data-download-url="@Url.Action("Cartoon", new { id, download = true })">
+                    <button type="button" class="button button--small" data-step="-1" aria-label="Меньше цветов">◄</button>
+                    <span class="color-step__label" data-step-label>@stored.ChosenColors цв.</span>
+                    <button type="button" class="button button--small" data-step="1" aria-label="Больше цветов">►</button>
+                    <span class="color-step__hint" data-step-hint></span>
+                </div>
+                <img src="@Url.Action("Cartoon", new { id })" alt="Картон под набор" data-cartoon-img />
                 <div class="tabpanel__bar">
                     <span class="dims">@stored.CartoonWidthPx × @stored.CartoonHeightPx px · @stored.CartoonDpi.ToString("0", ru) dpi</span>
-                    <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })">Скачать PNG</a>
+                    <a class="button button--small" href="@Url.Action("Cartoon", new { id, download = true })" data-cartoon-download>Скачать PNG</a>
                 </div>
             </div>
 
@@ -106,7 +159,7 @@
                 <th class="numeric">Стоимость, ₽</th>
             </tr>
             </thead>
-            <tbody>
+            <tbody data-consumption-body>
             @foreach (StoredMaterialLine line in stored.Lines)
             {
                 <tr>
@@ -132,9 +185,9 @@
             <tr>
                 <td colspan="4">Итого</td>
                 <td class="numeric">@stored.TotalModules.ToString("N0", ru)</td>
-                <td class="numeric">@stored.TotalGrossAreaM2.ToString("N3", ru)</td>
-                <td class="numeric">@stored.TotalMassKg.ToString("N2", ru)</td>
-                <td class="numeric">@stored.TotalCost.ToString("N0", ru)</td>
+                <td class="numeric" data-total-area>@stored.TotalGrossAreaM2.ToString("N3", ru)</td>
+                <td class="numeric" data-total-mass>@stored.TotalMassKg.ToString("N2", ru)</td>
+                <td class="numeric" data-total-cost>@stored.TotalCost.ToString("N0", ru)</td>
             </tr>
             </tfoot>
         </table>
@@ -143,6 +196,7 @@
 
 @section Scripts {
     <script type="application/json" data-layout-data>@Html.Raw(Model.Parameters.LayoutDataJson)</script>
+    <script type="application/json" data-color-ladder>@Html.Raw(ladderJson)</script>
     <script src="~/js/layout.js" asp-append-version="true"></script>
     <script src="~/js/crop.js" asp-append-version="true"></script>
     <script src="~/js/ui.js" asp-append-version="true"></script>

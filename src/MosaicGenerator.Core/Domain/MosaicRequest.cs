@@ -47,6 +47,14 @@ public sealed record MosaicRequest
     public int MaxColors { get; init; } = 20;
 
     /// <summary>
+    /// Overrides the automatic colour pick with an exact shade count, clamped to what the ladder
+    /// holds. Zero leaves the choice to <see cref="Quantization.ReductionLadder.Knee"/>: this is
+    /// only set when the mosaicist steps the count past the range baked for the on-page arrows and
+    /// asks for a full regeneration at that number. Not hashed into the seed.
+    /// </summary>
+    public int ForceColors { get; init; }
+
+    /// <summary>
     /// Drives the per-module chipping and tone jitter. Left at zero it is derived from the
     /// request itself, so repeating a generation reproduces the previous layout exactly.
     /// </summary>

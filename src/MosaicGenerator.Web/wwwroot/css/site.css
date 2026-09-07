@@ -381,6 +381,19 @@ input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-v
 .tabpanel__bar .button { margin-left: auto; }
 .tabpanel__note { padding: 0 1rem 0.875rem; font-size: var(--step--1); color: var(--ink-faint); }
 
+.color-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--rule-soft);
+    font-size: var(--step--1);
+}
+.color-step[hidden] { display: none; }
+.color-step__label { font-variant-numeric: tabular-nums; font-weight: 600; }
+.color-step__hint { color: var(--ink-faint); }
+
 /* ---------- consumption ---------- */
 
 .consumption { display: flex; flex-direction: column; gap: 0.5rem; }

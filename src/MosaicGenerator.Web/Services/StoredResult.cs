@@ -1,4 +1,5 @@
 using MosaicGenerator.Core.Material;
+using MosaicGenerator.Core.Pipeline;
 
 namespace MosaicGenerator.Web.Services;
 
@@ -49,6 +50,22 @@ public sealed record StoredResult
 
     public required int MaxColors { get; init; }
 
+    /// <summary>Shades the knee search settled on — the automatic pick, before any manual override.</summary>
+    public required int AutoColors { get; init; }
+
+    /// <summary>Shades actually rendered: <see cref="AutoColors"/> unless the count was forced from this page.</summary>
+    public required int ChosenColors { get; init; }
+
+    /// <summary>The ceiling the automatic pick was bounded by — the form's «максимум цветов».</summary>
+    public required int ColorCeiling { get; init; }
+
+    /// <summary>
+    /// Cartoon dimensions and material table per shade count around <see cref="ChosenColors"/>, so
+    /// the result page can step through them with no round trip. The cartoons themselves are stored
+    /// as <c>cartoon-c{n}.png</c> beside the manifest.
+    /// </summary>
+    public required IReadOnlyList<StoredColorRung> ColorLadder { get; init; }
+
     public required int ColorsBeforeReduction { get; init; }
 
     public required int ModulesReassigned { get; init; }
@@ -74,6 +91,35 @@ public sealed record StoredResult
     public required decimal TotalCost { get; init; }
 
     public int TotalModules => Columns * Rows;
+}
+
+/// <summary>One step of the colour ladder as the result page needs it, minus the cartoon PNG.</summary>
+public sealed record StoredColorRung
+{
+    public required int ColorCount { get; init; }
+
+    public required int CartoonHeightPx { get; init; }
+
+    public required int ModulesReassigned { get; init; }
+
+    public required IReadOnlyList<StoredMaterialLine> Lines { get; init; }
+
+    public required double TotalGrossAreaM2 { get; init; }
+
+    public required double TotalMassKg { get; init; }
+
+    public required decimal TotalCost { get; init; }
+
+    public static StoredColorRung From(ColorLadderRung rung) => new()
+    {
+        ColorCount = rung.ColorCount,
+        CartoonHeightPx = rung.CartoonSheetHeightPx,
+        ModulesReassigned = rung.ModulesReassigned,
+        Lines = [.. rung.Report.Lines.Select(StoredMaterialLine.From)],
+        TotalGrossAreaM2 = rung.Report.TotalGrossAreaM2,
+        TotalMassKg = rung.Report.TotalMassKg,
+        TotalCost = rung.Report.TotalCost,
+    };
 }
 
 public sealed record StoredMaterialLine

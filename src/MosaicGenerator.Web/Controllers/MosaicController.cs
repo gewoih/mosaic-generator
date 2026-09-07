@@ -119,9 +119,12 @@ public sealed class MosaicController(
 
         // Guaranteed non-null here: the validation above rejects a request with no upload and no
         // SourceId before this point is reached.
+        Dictionary<int, byte[]> ladderCartoons =
+            result.ColorLadder.ToDictionary(rung => rung.ColorCount, rung => rung.CartoonPng);
+
         string id = results.Save(
             Describe(result, form, palette, choice, sourceId!),
-            result.CartoonPng, result.SchemePng, result.LegendPng);
+            result.CartoonPng, result.SchemePng, result.LegendPng, ladderCartoons);
 
         logger.LogInformation(
             "Generated {Columns}x{Rows} pieces of {Along}x{Across} mm from {Palette}, " +
@@ -182,8 +185,21 @@ public sealed class MosaicController(
     }
 
     [HttpGet("result/{id}/cartoon.png")]
-    public IActionResult Cartoon(string id, bool download = false) =>
-        Image(id, ResultImage.Cartoon, download, "karton.png");
+    public IActionResult Cartoon(string id, int? c = null, bool download = false)
+    {
+        // A shade count the arrows stepped to within the baked range — serve that cartoon straight
+        // from the temp folder. Anything else falls through to the one the page was generated at.
+        if (c is { } colors)
+        {
+            byte[]? baked = results.ReadLadderCartoon(id, colors);
+            if (baked is not null)
+            {
+                return download ? File(baked, "image/png", "karton.png") : File(baked, "image/png");
+            }
+        }
+
+        return Image(id, ResultImage.Cartoon, download, "karton.png");
+    }
 
     [HttpGet("result/{id}/scheme.png")]
     public IActionResult Scheme(string id, bool download = false) =>
@@ -258,6 +274,10 @@ public sealed class MosaicController(
         PricePerKgRub = form.PricePerKgRub,
         ActualAcross = choice.ModulesAcrossShortSide,
         MaxColors = form.MaxColors,
+        AutoColors = result.AutoColors,
+        ChosenColors = result.ChosenColors,
+        ColorCeiling = result.ColorCeiling,
+        ColorLadder = [.. result.ColorLadder.Select(StoredColorRung.From)],
         ColorsBeforeReduction = result.ColorsBeforeReduction,
         ModulesReassigned = result.ModulesReassigned,
         CartoonWidthPx = result.Cartoon.PixelWidth,

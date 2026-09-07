@@ -109,7 +109,9 @@ internal static class Program
         }
 
         var loader = new SkiaImageLoader();
-        var options = new MosaicGenerationOptions { Flatten = flatten };
+        // The bench wants the auto number and the one cartoon it will judge by eye, not the eleven
+        // the result page bakes for its arrows.
+        var options = new MosaicGenerationOptions { Flatten = flatten, BakeColorLadder = false };
         var service = new MosaicGenerationService(loader, new SkiaMosaicRenderer(), options);
 
         byte[] bytes = File.ReadAllBytes(photo);
@@ -162,7 +164,7 @@ internal static class Program
             "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "minWidthP5", "minWidthP1", "narrowWidth", "uncuttable", "awkward", "structureOff", "edgesCrossed",
             "dE_mean", "dE_p95", "dE_max", "colorsBefore", "colorsUsed", "rare", "dominant",
             "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "midIsland", "dL_med", "hueDrift",
-            "reassigned", "settle2", "settle2Moved", "ms"));
+            "reassigned", "settle2", "settle2Moved", "autoColors", "kneeRatio", "ceilingColors", "ms"));
 
         foreach (Run run in runs)
         {
@@ -407,6 +409,9 @@ internal static class Program
                 result.ModulesReassigned.ToString(CultureInfo.InvariantCulture),
                 result.SettledAfterReduction.ToString(CultureInfo.InvariantCulture),
                 result.SettledAfterReductionOnMoved.ToString(CultureInfo.InvariantCulture),
+                result.AutoColors.ToString(CultureInfo.InvariantCulture),
+                N(result.KneeRatio),
+                result.ColorCeiling.ToString(CultureInfo.InvariantCulture),
                 watch.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture),
             }));
 
@@ -417,7 +422,8 @@ internal static class Program
                 $"голое>0,3м {mask.BareBeyond(layout.ModuleWidthMm * 0.3):P2}  дыра {bareR / layout.ModuleWidthMm:0.00}м  " +
                 $"узкая сторона p5 {shape.MinSideP5:0.0}мм  ширина p5 {shape.MinWidthP5:0.0} p1 {shape.MinWidthP1:0.0}мм  " +
                 $"узких<5мм {shape.NarrowWidthShare:P1}  неколибельных {shape.UncuttableShare:P1}  излом {shape.KinkShare:P1}  " +
-                $"ΔE {colour.DeltaEMean:0.0}/{colour.DeltaEP95:0.0}  цветов {colour.ColorsUsed}  " +
+                $"ΔE {colour.DeltaEMean:0.0}/{colour.DeltaEP95:0.0}  цветов {colour.ColorsUsed} " +
+                $"(авто {result.AutoColors}/{result.ColorCeiling}, колено {result.KneeRatio:0.0})  " +
                 $"обрыв {colour.BandingShare:P1}  слипание {colour.MergedShare:P1}  " +
                 $"{watch.ElapsedMilliseconds}мс");
         }

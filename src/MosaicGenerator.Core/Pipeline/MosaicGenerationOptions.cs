@@ -17,4 +17,10 @@ public sealed record MosaicGenerationOptions
     /// <summary>Edge-preserving flattening before sampling. Null = off.</summary>
     public FlattenSettings? Flatten { get; init; }
 
+    /// <summary>
+    /// Render a cartoon and a material table for every shade count around the automatic pick, so
+    /// the result page can step through them without a round trip. The diagnostic bench turns this
+    /// off — it wants the auto number and the one cartoon, not eleven.
+    /// </summary>
+    public bool BakeColorLadder { get; init; } = true;
 }
