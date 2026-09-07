@@ -30,7 +30,7 @@ public sealed class GenerateFormModel
     public double PanelHeightCm { get; set; } = 15;
 
     [Display(Name = "Минимальная длина откуса, мм")]
-    public double ModuleAlongMm { get; set; } = 6;
+    public double ModuleAlongMm { get; set; } = 5;
 
     /// <summary>
     /// Which part of the photograph the panel keeps, as a fraction along each axis. The subject

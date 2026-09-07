@@ -45,11 +45,12 @@ public sealed record ModuleChoice
 public static class ModuleSelector
 {
     /// <summary>
-    /// Bite lengths a mosaicist actually cuts, finest to coarsest. Six millimetres is the floor
-    /// because it is the shortest bite that comes out on purpose rather than by accident — smaller
-    /// pieces do happen, but a panel cannot be set out of them.
+    /// Bite lengths a mosaicist actually cuts, finest to coarsest. Five millimetres is the floor:
+    /// measured on the gull panel, the background — where the course is let out longest — is laid
+    /// at 5–6 mm on purpose, so a bite the tessellation would only stretch further has no reason
+    /// to start any coarser. Below 5 mm the piece stops coming out on purpose.
     /// </summary>
-    public static readonly double[] AvailableModulesMm = [6, 8, 10, 12, 15, 20];
+    public static readonly double[] AvailableModulesMm = [5, 6, 8, 10, 12, 15, 20];
 
     /// <summary>
     /// Plate thickness to fall back on before a palette has been resolved — only reached while a

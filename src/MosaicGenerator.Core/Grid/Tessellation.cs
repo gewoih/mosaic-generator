@@ -1293,13 +1293,13 @@ public static class Tessellation
     public static double ContourLevel(DirectionField field) => ContourSet.LevelFor(field.EdgeCells);
 
     /// <summary>
-    /// The nearest bite on the real size series {6, 8, 10, 12, 15, 20} mm to <paramref name="target"/>,
+    /// The nearest bite on the real size series {5, 6, 8, 10, 12, 15, 20} mm to <paramref name="target"/>,
     /// never below <paramref name="floor"/> and never above <paramref name="ceiling"/>. On a tie the
     /// shorter bite wins, as the finer module does in <c>ModuleSelector</c>.
     /// </summary>
     private static double SnapAlong(double target, double floor, double ceiling)
     {
-        ReadOnlySpan<double> series = [6.0, 8.0, 10.0, 12.0, 15.0, 20.0];
+        ReadOnlySpan<double> series = [5.0, 6.0, 8.0, 10.0, 12.0, 15.0, 20.0];
         double best = floor;
         double bestGap = Math.Abs(target - floor);
         foreach (double v in series)
