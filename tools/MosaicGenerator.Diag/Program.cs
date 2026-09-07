@@ -61,6 +61,10 @@ internal static class Program
         // Снятый цвет каждой клетки и поставленный артикул, в <прогон>-cells.csv.
         bool cellsDump = args.Contains("--cells");
 
+        // Полная кривая стоимости редукции, в <прогон>-ladder.csv — сигнал, по которому
+        // калибруется KneeFactor (TODO п. 18, docs/kneefactor-kalibrovka-plan.md).
+        bool ladderDump = args.Contains("--ladder");
+
         // Where the wide gaps sit, drawn (TODO п. 4). The numbers say how much and how wide; this
         // says what shape the defect has on the work. The threshold is an argument because the
         // default 3 mm draws only the tail: the body of the defect is the field of adhesive between
@@ -77,7 +81,7 @@ internal static class Program
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
                 "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
                 "[--metric cie76|ciede2000] [--flatten off|r,dE,n,across] " +
-                "[--why] [--holes] [--holes-mm 2.0] [--cells]");
+                "[--why] [--holes] [--holes-mm 2.0] [--cells] [--ladder]");
             return 1;
         }
 
@@ -193,6 +197,18 @@ internal static class Program
             File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-cartoon.png"), result.CartoonPng);
             File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-scheme.png"), result.SchemePng);
             File.WriteAllBytes(Path.Combine(outDir, $"{run.Name}-legend.png"), result.LegendPng);
+
+            if (ladderDump)
+            {
+                var curve = new StringBuilder("colors,marginalCost,modulesReassigned\n");
+                foreach (ColorLadderCost rung in result.LadderCurve)
+                {
+                    curve.Append(string.Create(CultureInfo.InvariantCulture,
+                        $"{rung.ColorCount},{rung.MarginalCost:0.######},{rung.ModulesReassigned}\n"));
+                }
+
+                File.WriteAllText(Path.Combine(outDir, $"{run.Name}-ladder.csv"), curve.ToString());
+            }
 
             // Recomputed rather than plumbed out of the service: every step is deterministic, so
             // this is the same layout the PNGs were drawn from.

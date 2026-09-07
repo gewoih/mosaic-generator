@@ -58,6 +58,13 @@ public sealed record MosaicResult
     /// </summary>
     public required IReadOnlyList<ColorLadderRung> ColorLadder { get; init; }
 
+    /// <summary>
+    /// Diagnostic (TODO п. 18): the full reduction cost curve — the marginal cost of every drop from
+    /// the shades in use down to the ladder floor. The signal the knee search runs on; dumped by the
+    /// bench with <c>--ladder</c> to calibrate <see cref="Quantization.ReductionLadder.KneeFactor"/>.
+    /// </summary>
+    public required IReadOnlyList<ColorLadderCost> LadderCurve { get; init; }
+
     /// <summary>Modules that ended up on a different shade than the quantiser first chose.</summary>
     public required int ModulesReassigned { get; init; }
 
@@ -100,5 +107,16 @@ public sealed record ColorLadderRung
     public required MaterialReport Report { get; init; }
 
     /// <summary>Modules on a different shade than the quantiser first chose, at this rung.</summary>
+    public required int ModulesReassigned { get; init; }
+}
+
+/// <summary>One rung of the reduction cost curve, numbers only — see <see cref="MosaicResult.LadderCurve"/>.</summary>
+public sealed record ColorLadderCost
+{
+    public required int ColorCount { get; init; }
+
+    /// <summary>Perceptual cost of the drop that produced this rung; zero for the top rung.</summary>
+    public required double MarginalCost { get; init; }
+
     public required int ModulesReassigned { get; init; }
 }

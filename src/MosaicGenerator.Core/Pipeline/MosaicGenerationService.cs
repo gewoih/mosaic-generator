@@ -98,6 +98,12 @@ public sealed class MosaicGenerationService(
             ColorCeiling = request.MaxColors,
             KneeRatio = pick.KneeRatio,
             ColorLadder = baked,
+            LadderCurve = [.. ladder.Rungs.Select(r => new ColorLadderCost
+            {
+                ColorCount = r.ColorCount,
+                MarginalCost = r.MarginalCost,
+                ModulesReassigned = r.ModulesReassigned,
+            })],
             ModulesReassigned = chosenRung.ModulesReassigned,
             SettledAfterReduction = main.SettledAfterReduction,
             SettledAfterReductionOnMoved = main.SettledAfterReductionOnMoved,
