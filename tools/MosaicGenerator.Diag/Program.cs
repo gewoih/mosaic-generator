@@ -59,8 +59,14 @@ internal static class Program
         bool autopsy = args.Contains("--why");
 
         // Where the wide gaps sit, drawn (TODO п. 4). The numbers say how much and how wide; this
-        // says what shape the defect has on the work.
+        // says what shape the defect has on the work. The threshold is an argument because the
+        // default 3 mm draws only the tail: the body of the defect is the field of adhesive between
+        // courses, which starts just past the nominal 1 mm joint.
         bool holes = args.Contains("--holes");
+        double holesMm = double.TryParse(
+            Arg(args, "--holes-mm"), NumberStyles.Float, CultureInfo.InvariantCulture, out double hm)
+            ? hm
+            : 3.0;
 
         if (photo is null || !File.Exists(photo))
         {
@@ -68,7 +74,7 @@ internal static class Program
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
                 "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
                 "[--metric cie76|ciede2000] [--flatten off|r,dE,n,across] " +
-                "[--why]");
+                "[--why] [--holes] [--holes-mm 2.0]");
             return 1;
         }
 
@@ -350,7 +356,7 @@ internal static class Program
             if (holes)
             {
                 HoleMap.Write(
-                    Path.Combine(outDir, $"{run.Name}-holes.png"), layout, tesserae, 3.0);
+                    Path.Combine(outDir, $"{run.Name}-holes.png"), layout, tesserae, holesMm);
             }
 
             CoverageMask mask = CoverageMask.Rasterise(layout, tesserae);
