@@ -515,13 +515,15 @@ public static class Tessellation
                             // by the bisector between two staggered pieces: the mosaicist runs a line
                             // and knaps to it, which is why smalt comes out four-sided. Bisecting
                             // instead turned a staggered field into a honeycomb.
-                            if (!SameRun(all[j].CourseId, courseId) && Math.Abs(across) > span * 0.6)
+                            // Both sides must belong to a course. A filler has none, so its tangent is
+                            // whatever the field happened to give it, and the straight line it would
+                            // draw is not the line its neighbour draws — the two overlap. Measured on
+                            // gull 40×40: filler overlap 113 → 2,4 mm², narrow pieces 10,8 → 9,3 %.
+                            // A filler meets everyone on the bisector, as two fillers already did.
+                            if (courseId >= 0 && all[j].CourseId >= 0
+                                && !SameRun(all[j].CourseId, courseId) && Math.Abs(across) > span * 0.6)
                             {
-                                // A filler belongs to no course, so it gets a key of its own rather
-                                // than sharing one with every other filler on the panel.
-                                var key = (
-                                    all[j].CourseId >= 0 ? all[j].CourseId : -2 - j,
-                                    Math.Sign(across));
+                                var key = (all[j].CourseId, Math.Sign(across));
                                 (double nx, double ny, double offset) =
                                     SeamCut(centre, tangent, other, all[j].Tangent, joint);
                                 if (!seams.TryGetValue(key, out (double Span, double, double, double) held)
