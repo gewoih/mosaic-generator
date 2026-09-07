@@ -199,4 +199,116 @@ internal sealed class CoverageMask
 
         return d;
     }
+
+    /// <summary>
+    /// One connected patch of adhesive wider than the nominal joint — a wedge, as the eye reads it
+    /// on the cartoon.
+    /// </summary>
+    internal readonly record struct Wedge(double AreaMm2, double WidestMm, PointD Where, bool Fillable);
+
+    /// <summary>
+    /// Splits the wedges into the ones the material forbids filling and the ones it does not.
+    ///
+    /// A wedge between two courses converging at an acute angle cannot take a piece: its narrow side
+    /// would come out under <paramref name="minPieceMm"/>, and such a piece does not knap off by hand
+    /// (measured from life, CLAUDE.md). The mosaicist leaves adhesive there, and that is ordinary
+    /// mosaic, not a defect. So <c>jointArea</c> has a floor set by the material, and only what sits
+    /// above that floor is worth chasing.
+    ///
+    /// A patch counts as fillable when it is at least <paramref name="minPieceMm"/> across at its
+    /// widest AND holds the area of the smallest piece. Both are necessary conditions rather than
+    /// sufficient ones: the widest inscribed circle says a strip of that width fits somewhere, not
+    /// that a whole rectangle does, and a long thin triangle can carry the area without taking a
+    /// piece anywhere. So this is a deliberate over-estimate of the fillable share — the honest
+    /// direction to err in, since a target set on it can only be too ambitious, never too lax.
+    ///
+    /// <paramref name="overNominalMm"/> separates a wedge from the joint itself: below it the bare
+    /// points form one connected net over the whole panel and there are no patches to count.
+    /// </summary>
+    public static (double LegalArea, double FillableArea, int LegalCount, int FillableCount,
+        IReadOnlyList<Wedge> Wedges) Wedges(
+        MosaicLayout layout, IReadOnlyList<Tessera> tesserae, double overNominalMm, double minPieceMm)
+    {
+        CoverageMask fine = Rasterise(layout, tesserae, layout.ModuleWidthMm / 40.0);
+        double[] d = fine.Clearance();
+        double cell = fine._cell;
+        int w = fine._w, h = fine._h;
+
+        var inWedge = new bool[w * h];
+        for (int i = 0; i < d.Length; i++)
+        {
+            inWedge[i] = !fine._covered[i] && 2.0 * d[i] * cell > overNominalMm;
+        }
+
+        double panel = layout.FieldWidthMm * layout.FieldHeightMm;
+        double cellArea = cell * cell;
+        double minArea = minPieceMm * minPieceMm;
+
+        var seen = new bool[w * h];
+        var stack = new Stack<int>();
+        var found = new List<Wedge>();
+        double legal = 0.0, fillable = 0.0;
+        int legalCount = 0, fillableCount = 0;
+
+        for (int start = 0; start < inWedge.Length; start++)
+        {
+            if (!inWedge[start] || seen[start])
+            {
+                continue;
+            }
+
+            // Iterative flood fill: a wedge running along a seam can hold thousands of cells, and
+            // recursion over that overflows the stack on the larger panels.
+            stack.Push(start);
+            seen[start] = true;
+            int count = 0;
+            double widest = 0.0;
+            int at = start;
+
+            while (stack.Count > 0)
+            {
+                int k = stack.Pop();
+                count++;
+                double width = 2.0 * d[k] * cell;
+                if (width > widest)
+                {
+                    widest = width;
+                    at = k;
+                }
+
+                int x = k % w, y = k / w;
+                if (x > 0) Push(k - 1);
+                if (x < w - 1) Push(k + 1);
+                if (y > 0) Push(k - w);
+                if (y < h - 1) Push(k + w);
+            }
+
+            double area = count * cellArea;
+            bool canFill = widest >= minPieceMm && area >= minArea;
+            found.Add(new Wedge(
+                area, widest, new PointD(((at % w) + 0.5) * cell, ((at / w) + 0.5) * cell), canFill));
+
+            if (canFill)
+            {
+                fillable += area;
+                fillableCount++;
+            }
+            else
+            {
+                legal += area;
+                legalCount++;
+            }
+        }
+
+        return (legal / panel, fillable / panel, legalCount, fillableCount, found);
+
+        void Push(int k)
+        {
+            if (inWedge[k] && !seen[k])
+            {
+                seen[k] = true;
+                stack.Push(k);
+            }
+        }
+    }
 }

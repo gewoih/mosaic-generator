@@ -47,12 +47,33 @@ public static class HoleMap
         // as the shape of the gap rather than as scattered specks.
         double cell = layout.ModuleWidthMm / 40.0;
         float dot = (float)(cell * PxPerMm);
-        using var hole = new SKPaint { Color = new SKColor(0xFF, 0x00, 0x99), IsAntialias = false };
+        using var hole = new SKPaint { Color = new SKColor(0x40, 0x70, 0xC0), IsAntialias = false };
         foreach (PointD p in CoverageMask.WideGapPoints(layout, tesserae, wideMm))
         {
             canvas.DrawRect(
                 (float)((p.X - (cell / 2.0)) * PxPerMm), (float)((p.Y - (cell / 2.0)) * PxPerMm),
                 dot, dot, hole);
+        }
+
+        // Blue is adhesive the material forbids filling — a wedge narrower than the 5 mm hand limit,
+        // which a mosaicist would leave too. Ringed in magenta is the rare wedge that could have
+        // taken a piece: that, and only that, is what TODO п. 4 is worth chasing. Drawing the two
+        // apart is the whole point of the map — the eye cannot tell them apart on the cartoon, and
+        // the jointArea column counts them together.
+        (_, _, _, _, IReadOnlyList<CoverageMask.Wedge> wedges) =
+            CoverageMask.Wedges(layout, tesserae, layout.GroutWidthMm * 1.5, 5.0);
+        using var mark = new SKPaint
+        {
+            Color = new SKColor(0xFF, 0x00, 0x99),
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 3f,
+        };
+        foreach (CoverageMask.Wedge wedge in wedges.Where(x => x.Fillable))
+        {
+            canvas.DrawCircle(
+                (float)(wedge.Where.X * PxPerMm), (float)(wedge.Where.Y * PxPerMm),
+                (float)(3.0 * PxPerMm), mark);
         }
 
         using SKImage image = surface.Snapshot();

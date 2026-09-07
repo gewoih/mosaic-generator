@@ -81,6 +81,25 @@ internal static class Metrics
         /// <summary>Share of the field taken by the joint as a whole — nominal is ~20.5 % for 10×7 mm.</summary>
         public required double JointArea { get; init; }
 
+        /// <summary>
+        /// The share of the panel under wedges the material forbids filling: narrower than the 5 mm
+        /// hand limit at their widest, or smaller than the smallest piece. This is the floor of
+        /// <see cref="JointArea"/> — adhesive a mosaicist would leave too (TODO п. 4,
+        /// docs/klin-na-tortse-kursa-plan.md).
+        /// </summary>
+        public required double WedgeLegalArea { get; init; }
+
+        /// <summary>
+        /// The share under wedges wide and large enough to have taken a piece. A deliberate
+        /// over-estimate — see <see cref="CoverageMask.Wedges"/> — so a target set on it errs
+        /// towards too ambitious rather than too lax. This, not <see cref="JointArea"/>, is what
+        /// пункт 4 is worth chasing.
+        /// </summary>
+        public required double WedgeFillableArea { get; init; }
+
+        /// <summary>How many separate wedges could have taken a piece.</summary>
+        public required int WedgeFillableCount { get; init; }
+
         /// <summary>Narrowest side of the piece in millimetres, 5th percentile — what the nippers must hit.</summary>
         public required double MinSideP5 { get; init; }
 
@@ -216,6 +235,12 @@ internal static class Metrics
         (double jp50, double jp90, double jmax, double jwide, double jarea) =
             CoverageMask.JointWidths(layout, tesserae, 3.0);
 
+        // A wedge starts where the joint stops: below 1.5x the nominal the bare points are one
+        // connected net over the whole panel and there is nothing to count. 5 mm is the hand limit
+        // on the narrow side of a piece (measured from life, CLAUDE.md).
+        (double wedgeLegal, double wedgeFillable, int _, int wedgeCount, _) =
+            CoverageMask.Wedges(layout, tesserae, layout.GroutWidthMm * 1.5, 5.0);
+
         return new Shape
         {
             AreaMin = areas[0],
@@ -237,6 +262,9 @@ internal static class Metrics
             JointMaxMm = jmax,
             WideJointArea = jwide,
             JointArea = jarea,
+            WedgeLegalArea = wedgeLegal,
+            WedgeFillableArea = wedgeFillable,
+            WedgeFillableCount = wedgeCount,
             KinkShare = joints > 0 ? (double)kinks / joints : 0.0,
             CourseCount = lengths.Length,
             FillerShare = (double)tesserae.Count(t => t.CourseId < 0) / tesserae.Count,
