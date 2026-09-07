@@ -23,11 +23,11 @@ public sealed class GenerateFormModel
 
     [Display(Name = "Ширина панно, см")]
     [Range(10, 300, ErrorMessage = "Ширина панно: от 10 до 300 см.")]
-    public double PanelWidthCm { get; set; } = 15;
+    public double PanelWidthCm { get; set; } = 20;
 
     [Display(Name = "Высота панно, см")]
     [Range(10, 300, ErrorMessage = "Высота панно: от 10 до 300 см.")]
-    public double PanelHeightCm { get; set; } = 15;
+    public double PanelHeightCm { get; set; } = 20;
 
     [Display(Name = "Минимальная длина откуса, мм")]
     public double ModuleAlongMm { get; set; } = 5;
@@ -55,7 +55,7 @@ public sealed class GenerateFormModel
 
     [Display(Name = "Максимум цветов")]
     [Range(2, 100, ErrorMessage = "Максимум цветов: от 2 до 100.")]
-    public int MaxColors { get; set; } = 8;
+    public int MaxColors { get; set; } = 15;
 
     /// <summary>
     /// Exact shade count, set only when the mosaicist steps the count on the result page past the
