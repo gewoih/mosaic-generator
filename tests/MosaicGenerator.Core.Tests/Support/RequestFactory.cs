@@ -12,8 +12,7 @@ internal static class RequestFactory
         double wastePercent = 25,
         string paletteId = "test",
         decimal pricePerKg = 3200m,
-        int maxColors = 100,
-        ulong seed = 0) => new()
+        int maxColors = 100) => new()
         {
             PanelWidthMm = panelWidth,
             PanelHeightMm = panelHeight,
@@ -24,7 +23,6 @@ internal static class RequestFactory
             PaletteId = paletteId,
             PricePerKgRub = pricePerKg,
             MaxColors = maxColors,
-            Seed = seed,
         };
 
     public static MosaicLayout Layout(

@@ -9,8 +9,8 @@ public class RenderGeometryTests
     [Fact]
     public void TheSamePlanReproducesTheGeometryExactly()
     {
-        RenderPlan a = RenderGeometry.Compute(PlanFactory.Striped(seed: 12345), RenderOptions.Cartoon);
-        RenderPlan b = RenderGeometry.Compute(PlanFactory.Striped(seed: 12345), RenderOptions.Cartoon);
+        RenderPlan a = RenderGeometry.Compute(PlanFactory.Striped(), RenderOptions.Cartoon);
+        RenderPlan b = RenderGeometry.Compute(PlanFactory.Striped(), RenderOptions.Cartoon);
 
         Assert.Equal(Digest(a), Digest(b));
     }
@@ -20,7 +20,7 @@ public class RenderGeometryTests
     {
         // The half-step stagger belongs to a followed course, not the plain fallback grid.
         RenderPlan plan = RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 1), RenderOptions.Cartoon);
+            PlanFactory.Striped(), RenderOptions.Cartoon);
 
         RenderedModule even = plan.Modules.Single(m => m is { Row: 2, Column: 3 });
         RenderedModule odd = plan.Modules.Single(m => m is { Row: 3, Column: 3 });
@@ -32,7 +32,7 @@ public class RenderGeometryTests
     public void TesseraeStayInsideTheField()
     {
         RenderPlan plan = RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 42), RenderOptions.Cartoon);
+            PlanFactory.Striped(), RenderOptions.Cartoon);
         MosaicLayout layout = plan.Layout;
 
         double left = (layout.MarginXMm * plan.PixelsPerMm) - 1e-6;
@@ -56,7 +56,7 @@ public class RenderGeometryTests
     [InlineData(true)]
     public void EveryModuleIsFilledFlatWithItsUntouchedPaletteColour(bool scheme)
     {
-        MosaicPlan plan = PlanFactory.Striped(seed: 42);
+        MosaicPlan plan = PlanFactory.Striped();
         RenderOptions options = scheme ? RenderOptions.Scheme : RenderOptions.Cartoon;
 
         RenderPlan rendered = RenderGeometry.Compute(plan, options);
@@ -82,7 +82,7 @@ public class RenderGeometryTests
     [Fact]
     public void TheSchemeUsesCleanRectangles()
     {
-        RenderPlan rendered = RenderGeometry.Compute(PlanFactory.Striped(seed: 42), RenderOptions.Scheme);
+        RenderPlan rendered = RenderGeometry.Compute(PlanFactory.Striped(), RenderOptions.Scheme);
 
         foreach (RenderedModule module in rendered.Modules)
         {
@@ -96,7 +96,7 @@ public class RenderGeometryTests
     [Fact]
     public void ModulePositionsFollowTheLayoutInMillimetres()
     {
-        MosaicPlan plan = PlanFactory.Striped(seed: 1);
+        MosaicPlan plan = PlanFactory.Striped();
         RenderPlan rendered = RenderGeometry.Compute(plan, RenderOptions.Cartoon);
         MosaicLayout layout = plan.Layout;
 
@@ -112,7 +112,7 @@ public class RenderGeometryTests
     public void RequestedPixelsPerStepIsHonouredWhenNoCapBinds()
     {
         var options = RenderOptions.Cartoon with { PixelsPerStep = 24 };
-        RenderPlan rendered = RenderGeometry.Compute(PlanFactory.Striped(seed: 1), options);
+        RenderPlan rendered = RenderGeometry.Compute(PlanFactory.Striped(), options);
 
         Assert.Equal(24.0, rendered.Layout.StepXMm * rendered.PixelsPerMm, 1e-9);
     }

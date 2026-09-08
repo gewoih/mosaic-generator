@@ -11,7 +11,6 @@ public sealed class MosaicPlan
         MosaicLayout layout,
         Palette palette,
         int[] colorIndices,
-        ulong seed,
         IReadOnlyList<Tessera>? tesserae = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -30,7 +29,6 @@ public sealed class MosaicPlan
         Layout = layout;
         Palette = palette;
         ColorIndices = colorIndices;
-        Seed = seed;
         _tesserae = tesserae;
     }
 
@@ -40,8 +38,6 @@ public sealed class MosaicPlan
 
     /// <summary>Palette index per tessera, in the order <see cref="Tesserae"/> lists them.</summary>
     public int[] ColorIndices { get; }
-
-    public ulong Seed { get; }
 
     /// <summary>
     /// The tesserae themselves. Supplied by the pipeline once the direction field is known;

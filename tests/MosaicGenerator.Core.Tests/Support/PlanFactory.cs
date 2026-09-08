@@ -6,7 +6,6 @@ internal static class PlanFactory
 {
     /// <summary>A plan whose cells cycle through the palette, so every colour is exercised.</summary>
     public static MosaicPlan Striped(
-        ulong seed,
         double panelWidth = 300,
         double panelHeight = 200,
         double module = 20,
@@ -22,6 +21,6 @@ internal static class PlanFactory
             indices[i] = i % palette.Colors.Count;
         }
 
-        return new MosaicPlan(layout, palette, indices, seed);
+        return new MosaicPlan(layout, palette, indices);
     }
 }

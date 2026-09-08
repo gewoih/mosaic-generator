@@ -15,7 +15,7 @@ public class CartoonLegendTests
 
     private static MaterialReport Report()
     {
-        MosaicPlan plan = PlanFactory.Striped(seed: 5);
+        MosaicPlan plan = PlanFactory.Striped();
         return MaterialCalculator.Calculate(plan, 1.25, 1500m);
     }
 

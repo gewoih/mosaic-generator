@@ -64,9 +64,9 @@ public class SkiaMosaicRendererTests
     public void TheJointIsTheDarkGreyTheOptionsCarryWhateverTheLayout()
     {
         RenderPlan fine = RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 5, module: 4, grout: 1), RenderOptions.Cartoon);
+            PlanFactory.Striped(module: 4, grout: 1), RenderOptions.Cartoon);
         RenderPlan coarse = RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 5, module: 20, grout: 3), RenderOptions.Cartoon);
+            PlanFactory.Striped(module: 20, grout: 3), RenderOptions.Cartoon);
 
         Assert.Equal(RenderOptions.Cartoon.JointColor.ToBytes(), fine.JointColor.ToBytes());
         Assert.Equal(RenderOptions.Cartoon.JointColor.ToBytes(), coarse.JointColor.ToBytes());
@@ -92,7 +92,7 @@ public class SkiaMosaicRendererTests
     [Fact]
     public void TheLegendSheetShowsASwatchPerArticleInItsColour()
     {
-        MosaicPlan plan = PlanFactory.Striped(seed: 5);
+        MosaicPlan plan = PlanFactory.Striped();
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 1500m);
         using var font = new SKFont(SchemeFont.Typeface, (float)CartoonLegend.LabelFontSizePx);
         CartoonLegend legend = CartoonLegend.Layout(report, label => font.MeasureText(label));
@@ -115,7 +115,7 @@ public class SkiaMosaicRendererTests
     [Fact]
     public void TheSchemeIsWhiteWithDarkOutlinesAndCodes()
     {
-        MosaicPlan plan = PlanFactory.Striped(seed: 5);
+        MosaicPlan plan = PlanFactory.Striped();
         RenderPlan rendered = RenderGeometry.Compute(plan, RenderOptions.Scheme);
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 1500m);
 
@@ -147,7 +147,7 @@ public class SkiaMosaicRendererTests
     [Fact]
     public void TheCartoonAndSchemeCarryThePhysicalScale()
     {
-        MosaicPlan plan = PlanFactory.Striped(seed: 5);
+        MosaicPlan plan = PlanFactory.Striped();
         RenderPlan cartoon = RenderGeometry.Compute(plan, RenderOptions.Cartoon);
         RenderPlan scheme = RenderGeometry.Compute(plan, RenderOptions.Scheme);
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 1500m);
@@ -170,5 +170,5 @@ public class SkiaMosaicRendererTests
     }
 
     private static RenderPlan Plan() =>
-        RenderGeometry.Compute(PlanFactory.Striped(seed: 5), RenderOptions.Cartoon);
+        RenderGeometry.Compute(PlanFactory.Striped(), RenderOptions.Cartoon);
 }

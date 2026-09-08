@@ -15,7 +15,7 @@ public class MaterialCalculatorTests
 
         Palette palette = PaletteFactory.Of(
             PaletteFactory.Color("#3C6E71", thicknessMm: 8, densityKgPerM3: 2500));
-        var plan = new MosaicPlan(layout, palette, new int[layout.TotalModules], seed: 1);
+        var plan = new MosaicPlan(layout, palette, new int[layout.TotalModules]);
 
         MaterialReport report = MaterialCalculator.Calculate(plan, wasteFactor: 1.25, pricePerKg: 3200m);
 
@@ -34,7 +34,7 @@ public class MaterialCalculatorTests
     {
         MosaicLayout layout = RequestFactory.Layout(panelWidth: 200, panelHeight: 200, module: 20, grout: 0);
         Palette palette = PaletteFactory.Of(PaletteFactory.Color("#3C6E71"));
-        var plan = new MosaicPlan(layout, palette, new int[layout.TotalModules], seed: 1);
+        var plan = new MosaicPlan(layout, palette, new int[layout.TotalModules]);
 
         MaterialLine none = MaterialCalculator.Calculate(plan, 1.0, 3200m).Lines[0];
         MaterialLine quarter = MaterialCalculator.Calculate(plan, 1.25, 3200m).Lines[0];
@@ -57,7 +57,7 @@ public class MaterialCalculatorTests
 
         // 60 / 30 / 10 across the grid.
         int[] indices = [.. Enumerable.Repeat(0, 60), .. Enumerable.Repeat(1, 30), .. Enumerable.Repeat(2, 10)];
-        var plan = new MosaicPlan(layout, palette, indices, seed: 1);
+        var plan = new MosaicPlan(layout, palette, indices);
 
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 3200m);
 
@@ -79,7 +79,7 @@ public class MaterialCalculatorTests
             PaletteFactory.Color("#FF0000", article: "SM-003"));
 
         int[] indices = [.. Enumerable.Repeat(0, 10), .. Enumerable.Repeat(1, 60), .. Enumerable.Repeat(2, 30)];
-        var plan = new MosaicPlan(layout, palette, indices, seed: 1);
+        var plan = new MosaicPlan(layout, palette, indices);
 
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 3200m);
 
@@ -97,7 +97,7 @@ public class MaterialCalculatorTests
     {
         MosaicLayout layout = RequestFactory.Layout(panelWidth: 200, panelHeight: 200, module: 20, grout: 0);
         Palette palette = PaletteFactory.OfHex("#FFFFFF", "#000000", "#FF0000");
-        var plan = new MosaicPlan(layout, palette, new int[layout.TotalModules], seed: 1);
+        var plan = new MosaicPlan(layout, palette, new int[layout.TotalModules]);
 
         MaterialReport report = MaterialCalculator.Calculate(plan, 1.25, 3200m);
 

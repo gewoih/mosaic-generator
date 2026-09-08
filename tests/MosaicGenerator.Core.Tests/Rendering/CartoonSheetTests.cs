@@ -8,7 +8,7 @@ public class CartoonSheetTests
 {
     private static RenderPlan Plan(double panelWidth = 300, double panelHeight = 200) =>
         RenderGeometry.Compute(
-            PlanFactory.Striped(seed: 5, panelWidth: panelWidth, panelHeight: panelHeight),
+            PlanFactory.Striped(panelWidth: panelWidth, panelHeight: panelHeight),
             RenderOptions.Cartoon);
 
     [Fact]

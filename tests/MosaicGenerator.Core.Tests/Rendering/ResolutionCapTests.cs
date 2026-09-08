@@ -10,7 +10,7 @@ public class ResolutionCapTests
     public void AnOversizedPanelIsPulledUnderTheLongSideCap()
     {
         // 3000 x 400 mm at 48 px per 23 mm step would be 6260 px wide.
-        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 400, seed: 1);
+        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 400);
         var options = RenderOptions.Scheme with { MaxLongSidePx = 6000, MaxTotalPixels = long.MaxValue };
 
         RenderPlan rendered = RenderGeometry.Compute(plan, options);
@@ -22,7 +22,7 @@ public class ResolutionCapTests
     [Fact]
     public void AnOversizedPanelIsPulledUnderTheTotalPixelCap()
     {
-        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 3000, seed: 1);
+        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 3000);
         var options = RenderOptions.Scheme with { MaxLongSidePx = int.MaxValue, MaxTotalPixels = 30_000_000 };
 
         RenderPlan rendered = RenderGeometry.Compute(plan, options);
@@ -35,7 +35,7 @@ public class ResolutionCapTests
     [Fact]
     public void BothCapsHoldTogetherOnTheLargestAllowedPanel()
     {
-        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 3000, module: 5, grout: 1, seed: 1);
+        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 3000, module: 5, grout: 1);
 
         RenderPlan rendered = RenderGeometry.Compute(plan, RenderOptions.Scheme);
 
@@ -46,7 +46,7 @@ public class ResolutionCapTests
     [Fact]
     public void ThePixelScaleStaysConsistentWithTheRasterSize()
     {
-        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 1800, seed: 1);
+        MosaicPlan plan = PlanFactory.Striped(panelWidth: 3000, panelHeight: 1800);
 
         RenderPlan rendered = RenderGeometry.Compute(plan, RenderOptions.Scheme);
 
@@ -62,7 +62,7 @@ public class ResolutionCapTests
     public void TheRasterCoversExactlyThePhysicalPanel()
     {
         RenderPlan rendered = RenderGeometry.Compute(
-            PlanFactory.Striped(panelWidth: 1200, panelHeight: 800, seed: 1),
+            PlanFactory.Striped(panelWidth: 1200, panelHeight: 800),
             RenderOptions.Scheme);
 
         Assert.Equal(rendered.PixelsPerMm * 25.4, rendered.Dpi, 1e-9);

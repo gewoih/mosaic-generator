@@ -1,7 +1,3 @@
-using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
-
 namespace MosaicGenerator.Core.Domain;
 
 public sealed record MosaicRequest
@@ -50,34 +46,9 @@ public sealed record MosaicRequest
     /// Overrides the automatic colour pick with an exact shade count, clamped to what the ladder
     /// holds. Zero leaves the choice to <see cref="Quantization.ReductionLadder.Knee"/>: this is
     /// only set when the mosaicist steps the count past the range baked for the on-page arrows and
-    /// asks for a full regeneration at that number. Not hashed into the seed.
+    /// asks for a full regeneration at that number.
     /// </summary>
     public int ForceColors { get; init; }
 
-    /// <summary>
-    /// Drives the per-module chipping and tone jitter. Left at zero it is derived from the
-    /// request itself, so repeating a generation reproduces the previous layout exactly.
-    /// </summary>
-    public ulong Seed { get; init; }
-
     public double WasteFactor => 1.0 + (WastePercent / 100.0);
-
-    public ulong EffectiveSeed => Seed != 0 ? Seed : DeriveSeed();
-
-    private ulong DeriveSeed()
-    {
-        var builder = new StringBuilder()
-            .Append(PanelWidthMm.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(PanelHeightMm.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(ModuleWidthMm.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(ModuleHeightMm.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(GroutWidthMm.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(CropAnchorX.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(CropAnchorY.ToString("R", CultureInfo.InvariantCulture)).Append('|')
-            .Append(PaletteId);
-
-        Span<byte> digest = stackalloc byte[32];
-        SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()), digest);
-        return BitConverter.ToUInt64(digest) | 1UL;
-    }
 }

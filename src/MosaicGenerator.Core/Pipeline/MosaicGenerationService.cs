@@ -117,8 +117,7 @@ public sealed class MosaicGenerationService(
     /// Everything the layout needs before a shade count is chosen: crop, direction field,
     /// tessellation, sampling, the tonal passes, the first quantisation and the first
     /// <see cref="CoherentMap"/>. None of it reads <see cref="MosaicRequest.MaxColors"/> or the
-    /// pins, and <see cref="MosaicRequest.EffectiveSeed"/> does not hash them either — so the
-    /// prefix is computed once and every rung of the colour ladder shares it.
+    /// pins — so the prefix is computed once and every rung of the colour ladder shares it.
     /// </summary>
     private Prepared Prepare(Stream photo, MosaicRequest request, Palette palette)
     {
@@ -223,7 +222,7 @@ public sealed class MosaicGenerationService(
         }
 
         var plan = new MosaicPlan(
-            context.Layout, context.Palette, finalIndices, context.Request.EffectiveSeed, context.Tesserae);
+            context.Layout, context.Palette, finalIndices, context.Tesserae);
         MaterialReport report = MaterialCalculator.Calculate(
             plan, context.Request.WasteFactor, context.Request.PricePerKgRub);
 
