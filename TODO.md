@@ -280,3 +280,227 @@ on directly».
 **Где в коде.** `Web/Views/Mosaic/_Controls.cshtml` (поле числа цветов),
 `Core/Validation/ValidationLimits.cs` (`MaxColors` = 100),
 `Core/Quantization/ReductionLadder.cs` (потолок и колено).
+
+---
+
+## 26. Глобальное изменяемое состояние: метрика цвета — process-wide switch
+
+**Проблема.** `Core/Colors/ColorDistance.cs:54` — `public static Metric MatchingMetric
+{ get; set; }`: выбор метрики (CIE76 / CIEDE2000) живёт в статическом свойстве на
+весь процесс. Комментарий рядом (стр. 39–41) сам признаёт причину — «чтобы прогнать
+обе, не протаскивая параметр через весь конвейер». Для будущего агента это скрытая
+зависимость: `Quantizer.NearestIndex` и `PaletteReducer` меняют поведение от
+глобалки, которой нет в их сигнатурах; в тестах её надо помнить сбрасывать.
+
+**Чем подтверждается.** `grep MatchingMetric`: запись — только извне (стенд с
+флагом `--ciede`, тесты), чтение — в матчере палитры. `docs/ciede2000-plan.md` и
+пункт 11: CIEDE2000 на палитре смальты не помогает, прод стоит на `Cie76` —
+свойство всегда в одном значении.
+
+**Что сделать.** По духу инструмента («параметр, который всегда в одном положении,
+лучше убрать») — если вторая метрика больше не нужна для прогонов, удалить `enum
+Metric`, свойство и ветвление в `Match`, оставить одну функцию расстояния. Если
+нужна для стенда — вынести в явный параметр `Match`/`NearestIndex`, стенд передаёт
+его сам. Правка побитово нейтральная: полная приёмка по `samples/`, все
+геометрические колонки max |Δ| = 0.
+
+**Где в коде.** `Core/Colors/ColorDistance.cs`; чтение — `Core/Quantization/Quantizer.cs`,
+`Core/Quantization/PaletteReducer.cs`; запись — `tools/MosaicGenerator.Diag`, тесты.
+
+---
+
+## 27. Оркестратор знает про всё: лестница цветов вшита в `MosaicGenerationService`
+
+**Проблема.** `Core/Pipeline/MosaicGenerationService.cs` (332 стр.) импортит
+`Colors, Domain, Grid, Imaging, Material, Quantization, Rendering, Validation` —
+весь Core — и в одном классе делает две несвязанные вещи: оркестрацию конвейера
+(`Prepare`/`RenderAt`) и логику цветовой лестницы —
+`BuildLadder`/`Knee`/`ForceColors`/`BakeColorLadder`/`LadderReach` (`Generate`,
+стр. ~42–114). Кто правит подбор числа цветов — читает весь конвейер рендера, и
+наоборот. `Prepared`/`Rendered` — закрытые record'ы, неявный pipeline-context.
+
+**Чем подтверждается.** Ревью 2026-09-08; `Generate` перемежает
+`PaletteReducer.BuildLadder` / `ladder.Knee` / `RenderAt` в одном теле.
+
+**Что сделать.** Извлечь `ColorLadderPlanner`: принимает `Prepared` + запрос,
+отдаёт выбранную ступень и, при `Bake`, лесенку картонов.
+`MosaicGenerationService` остаётся тонким оркестратором. Чистый рефакторинг —
+характеристические тесты до правки, побитовая нейтральность.
+
+**Где в коде.** `Core/Pipeline/MosaicGenerationService.cs`,
+`Core/Quantization/PaletteReducer.cs`, `Core/Quantization/ReductionLadder.cs`.
+
+---
+
+## 28. God-object результата: `MosaicResult` / `StoredResult`, `Describe()` копирует поле в поле
+
+**Проблема.** `Core/Pipeline/MosaicResult.cs` (~122 стр., ~25 полей) держит в
+одном record картон, схему, легенду, отчёт материала, диагностику свёртки, кривую
+стоимости, счётчики тессер. `Web/Services/StoredResult.cs` дублирует форму,
+`MosaicController.Describe()` (стр. ~277) переносит поле в поле вручную — новое
+поле требует правки в трёх местах, легко рассинхронизировать.
+
+**Чем подтверждается.** Ревью 2026-09-08; счётчик полей и ручной маппинг в
+контроллере.
+
+**Что сделать.** Сгруппировать в под-records по смыслу: `LayoutSummary`,
+`ColorLadderResult`, `MaterialSummary`, `RenderArtifacts`. `StoredResult` хранит
+те же под-records, `Describe()` собирается из них.
+
+**Где в коде.** `Core/Pipeline/MosaicResult.cs`, `Web/Services/StoredResult.cs`,
+`Web/Controllers/MosaicController.cs`.
+
+---
+
+## 29. Опция движка добавляется в трёх местах: ручной маппинг `MosaicOptions` → `MosaicGenerationOptions`
+
+**Проблема.** `Web/Program.cs` (стр. ~69–100) руками переносит поля из веб-конфига
+`MosaicOptions` в `MosaicGenerationOptions`. Новая настройка требует правки в
+`MosaicOptions`, `appsettings.json` и лямбде в `Program.cs`; забыл третье —
+настройка молча не доезжает.
+
+**Чем подтверждается.** Ревью 2026-09-08; тело лямбды в `Program.cs`.
+
+**Что сделать.** Биндить секцию напрямую (`Configure<MosaicGenerationOptions>` по
+секции конфига), либо свести к одному record. Убрать промежуточный `MosaicOptions`,
+если он больше ничего не добавляет.
+
+**Где в коде.** `Web/Program.cs`, `Web/Options/MosaicOptions.cs`,
+`Core/Pipeline/MosaicGenerationOptions.cs`.
+
+---
+
+## 30. `MosaicRequest.DeriveSeed` — ручной SHA256 по подмножеству полей
+
+**Проблема.** `Core/Domain/MosaicRequest.cs:~67` считает сид SHA256 по вручную
+перечисленному подмножеству полей запроса. Добавил новое поле, влияющее на
+раскладку, забыл вписать в `DeriveSeed` — разные раскладки получают один сид,
+регенерация «не видит» изменение. Хрупкость отмечена комментариями в файле.
+
+**Чем подтверждается.** Ревью 2026-09-08; комментарии в `MosaicRequest.cs`.
+
+**Что сделать.** Выводить сид из всех layout-влияющих полей автоматически (канонич.
+сериализация / record equality), а не ручным списком. Поля, которые в сид НЕ входят
+(цена, процент отхода), собрать в отдельную группу/тип, чтобы исключение было
+структурным, а не «не забыть».
+
+**Где в коде.** `Core/Domain/MosaicRequest.cs`.
+
+---
+
+## 31. Монолит укладки: `Tessellation.cs` 1487 строк, `Advected` ~530 строк
+
+**Проблема.** `Core/Grid/Tessellation.cs` — самый перегруженный класс проекта:
+бордюр, барьерное кольцо, контурные курсы, заливка стримлайнами, ресайз откуса,
+нарезка ячеек, fallback-сетка. Метод `Advected` (стр. ~67–597) — ~530 строк, 8
+вложенных локальных функций, `CutCells` с вложенностью 5 уровней; локальная
+`across` (стр. ~511) затеняет внешнюю `across` (шаг курса). Другой алгоритм укладки
+воткнуть некуда: выбор `Advected` vs `NominalGrid` — `if` по featureless-полю.
+
+**Чем подтверждается.** Ревью 2026-09-08 (размеры, вложенность, затенение).
+
+**Что сделать.** Отдельным планом в `docs/`. Первый шаг за одну итерацию: выделить
+`ILayoutStrategy` с реализациями `AdvectedLayout` / `NominalGridLayout` и явной
+точкой выбора — внутренности не трогая. Дальше — резать `Advected` на именованные
+единицы (посев курсов, ведение, нарезка, слияние сливеров), переименовать
+затеняющую `across`. Обязательно: характеристические тесты, побитовая
+нейтральность (max |Δ| = 0 по всем колонкам приёмки).
+
+**Где в коде.** `Core/Grid/Tessellation.cs`.
+
+---
+
+## 32. Инлайновые числовые множители в формулах ядра без именованных констант
+
+**Проблема.** Ряд формул содержит «магические» множители прямо в выражении,
+объяснённые лишь общими словами — агент не может проверить, откуда число:
+
+- `Grid/FieldGeometry.cs` `ResizedAlong` (~425–451): `Max(edgeRef*0.35, …)`,
+  `(chord/arc - 0.80) / 0.15` — 0.35 / 0.80 / 0.15 не выведены;
+- `Grid/ContourSet.cs` `LevelFor` (~119–123): `strong < 0.15 ? 0 : Max(0.12,
+  strong*0.42)` — три порога задают «где форма» для всего пайплайна
+  (`ContourSet`, `FigureMask`, `DirectionField`, `Tessellation.ContourLevel`);
+- `Quantization/ToneMap.cs` `FoldChroma` (~280–313): вывод экспоненты сжатия хромы
+  не дан; тройная модульная арифметика в индексации `ceilings`;
+- `Quantization/PaletteReducer.cs`: `*= 1.0 + 1.6*compactness` (~372),
+  `members.Count / 6.0` (~444) — 1.6 и 6 только в прозе;
+- `Grid/FieldGeometry.cs` `SquareOff` (~170–247): порог `8.0°`, `best*4.0`;
+- `Grid/StructureTensor.cs`: `radius ≈ pixels*sqrt(3/4)` (приближение «3
+  бокс-прохода ≈ гауссиана») не подписано; перцентиль `0.95` захардкожен;
+- `Grid/CellSampler.cs` `EdgeSpread = 9.0`; `Grid/CourseGuidance.cs` `alongMm*20.0`,
+  `Max(w,h)*0.25`.
+
+**Чем подтверждается.** Ревью 2026-09-08, поимённый список file:line.
+
+**Что сделать.** Вынести каждый множитель в `private const` с говорящим именем и
+одной строкой: что за величина и откуда значение (замер / вывод / rule of thumb +
+ссылка на `docs/`). Только именование и комментарии — поведение не меняется,
+приёмка подтверждает max |Δ| = 0.
+
+**Где в коде.** Файлы перечислены выше.
+
+---
+
+## 33. Мёртвый код и вводящий в заблуждение комментарий в `DirectionField`
+
+**Проблема.** `Core/Grid/DirectionField.cs` `Diffuse` (~246–286):
+`const double horizontalBias = 0.0` делает строки 278–279
+(`mixX + horizontalBias*(1-mixX)`, `mixY - horizontalBias*mixY`) тождественными —
+мёртвый код. При этом doc-комментарий метода (стр. 241–245) описывает «a faint pull
+toward horizontal … the last resort» как работающий механизм. Агент поверит
+комментарию. По конвенции проекта выключенный этап — техдолг: удаляется, а не спит
+под нулевой константой.
+
+**Чем подтверждается.** Файл прочитан 2026-09-08: `horizontalBias = 0.0`,
+комментарий описывает несуществующее поведение.
+
+**Что сделать.** Удалить `horizontalBias` и строки 278–279, привести комментарий в
+соответствие; либо, если наклон к горизонтали нужен — вернуть ненулевое значение
+осознанно, с обоснованием и замером. Заодно проверить мелкие несвязанные числа
+рядом: `SeedBlankCells` `hint = 0.03` и порог `< 0.05` (~233), `keep`-потолок
+`0.93` (~273).
+
+**Где в коде.** `Core/Grid/DirectionField.cs`.
+
+---
+
+## 34. Дублирование размытия/чамфера между `StructureTensor` и `DistanceField`
+
+**Проблема.** `Core/Grid/StructureTensor.cs` и `Core/Grid/DistanceField.cs`
+содержат почти дублирующиеся приватные `Blur` / `BoxBlur` / чамфер-проходы —
+параллельная логика в двух местах. Литерал диагонали `1.41421356237` захардкожен и
+в `DistanceField.cs:~139`, и в `Tessellation.cs:~1089`.
+
+**Чем подтверждается.** Ревью 2026-09-08.
+
+**Что сделать.** Вынести общий бокс-фильтр/чамфер в один internal-helper в
+`Core/Grid/`, заменить оба вызова. Диагональ — одна именованная константа.
+Побитовая нейтральность.
+
+**Где в коде.** `Core/Grid/StructureTensor.cs`, `Core/Grid/DistanceField.cs`,
+`Core/Grid/Tessellation.cs`.
+
+---
+
+## 35. `ModuleChoice` считается в вебе, правило шва/торца размазано Web↔Core
+
+**Проблема.** `Web/Models/GenerateFormModel.cs:~84` вызывает
+`Domain/ModuleSelector.Choose` **до** `Generate`; ядро принимает уже готовые
+`ModuleWidthMm/HeightMm/GroutWidthMm` и заново считает раскладку
+(`MosaicLayout.FitCount` дублирует прикидку). Правило «откус → торец → шов из
+толщины смальты» живёт наполовину в Web, наполовину в Core — неочевидно, где
+источник истины.
+
+**Чем подтверждается.** Ревью 2026-09-08; `GenerateFormModel.Choose` →
+`ModuleSelector.Choose`; `MosaicLayout.cs:~77` `FitCount`.
+
+**Что сделать.** Перенести `ModuleSelector.Choose` внутрь ядра (в начало
+`MosaicGenerationService` / `MosaicLayout.Compute`). Веб отдаёт сырой ввод (размер
+откуса, размеры панно, палитра), ядро выводит модуль и раскладку в одном месте.
+Требование `docs/vybor-otkusa-plan.md` — результат побайтово тот же, полная
+перемерка. Заодно снять «двойной путь» с `Web/wwwroot/js/layout.js`, если он всё
+ещё перебирает раскладку параллельно серверу.
+
+**Где в коде.** `Web/Models/GenerateFormModel.cs`, `Core/Domain/ModuleSelector.cs`,
+`Core/Domain/MosaicLayout.cs`, `Core/Pipeline/MosaicGenerationService.cs`,
+`Web/wwwroot/js/layout.js`.
