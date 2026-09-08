@@ -70,6 +70,11 @@ internal static class Program
         // default 3 mm draws only the tail: the body of the defect is the field of adhesive between
         // courses, which starts just past the nominal 1 mm joint.
         bool holes = args.Contains("--holes");
+
+        // The border between two articles, drawn where the photograph under it is flat (TODO п. 22).
+        // The `ragged` column says how much the border wanders; this says where — in the sky, or
+        // along a real edge of the subject. Read alongside it the way --holes is read with jointArea.
+        bool ragged = args.Contains("--ragged");
         double holesMm = double.TryParse(
             Arg(args, "--holes-mm"), NumberStyles.Float, CultureInfo.InvariantCulture, out double hm)
             ? hm
@@ -81,7 +86,7 @@ internal static class Program
                 "usage: --photo <file> [--palettes <dir>] [--out <dir>] [--colors N,N] " +
                 "[--sizes 15x15,30x30] [--modules 6,8,10,12,15,20] [--crops 0.5,0.35] " +
                 "[--metric cie76|ciede2000] [--flatten off|r,dE,n,across] " +
-                "[--why] [--holes] [--holes-mm 2.0] [--cells] [--ladder]");
+                "[--why] [--holes] [--holes-mm 2.0] [--ragged] [--cells] [--ladder]");
             return 1;
         }
 
@@ -170,7 +175,7 @@ internal static class Program
             "wedgeLegal", "wedgeFill", "wedgeN",
             "kink", "courses", "stubCourse", "medCourse", "filler", "minSideP5", "minWidthP5", "minWidthP1", "narrowWidth", "uncuttable", "awkward", "structureOff", "edgesCrossed",
             "dE_mean", "dE_p95", "dE_max", "colorsBefore", "colorsUsed", "rare", "dominant",
-            "lightestGap", "banding", "merged", "singleton", "loudSingleton", "smallIsland", "midIsland", "dL_med", "hueDrift",
+            "lightestGap", "banding", "merged", "ragged", "singleton", "loudSingleton", "smallIsland", "midIsland", "dL_med", "hueDrift",
             "reassigned", "settle2", "settle2Moved", "autoColors", "kneeRatio", "ceilingColors", "ms"));
 
         foreach (Run run in runs)
@@ -404,6 +409,13 @@ internal static class Program
             CieLab[] observed = PaletteObservation.Lab(palette);
             Metrics.Colour colour = Metrics.Colours(
                 layout, tesserae, cells, indices, palette, observed);
+            RaggedBoundary.Result raggedness = RaggedBoundary.Measure(layout, tesserae, cells, indices);
+            if (ragged)
+            {
+                RaggedBoundary.Write(
+                    Path.Combine(outDir, $"{run.Name}-ragged.png"), layout, tesserae, raggedness);
+            }
+
             (double bareR, _) = mask.LargestBare();
 
             csv.AppendLine(string.Join(',', new[]
@@ -438,6 +450,7 @@ internal static class Program
                 colour.ColorsUsed.ToString(CultureInfo.InvariantCulture),
                 colour.RareColors.ToString(CultureInfo.InvariantCulture),
                 N(colour.DominantShare), N(colour.LightestGap), N(colour.BandingShare), N(colour.MergedShare),
+                N(raggedness.RadPerModule),
                 N(colour.SingletonShare), N(colour.LoudSingletonShare), N(colour.SmallIslandShare),
                 N(colour.MidIslandShare),
                 N(colour.DeltaLMedian), N(colour.HueDriftShare),
@@ -459,7 +472,7 @@ internal static class Program
                 $"узких<5мм {shape.NarrowWidthShare:P1}  неколибельных {shape.UncuttableShare:P1}  излом {shape.KinkShare:P1}  " +
                 $"ΔE {colour.DeltaEMean:0.0}/{colour.DeltaEP95:0.0}  цветов {colour.ColorsUsed} " +
                 $"(авто {result.AutoColors}/{result.ColorCeiling}, колено {result.KneeRatio:0.0})  " +
-                $"обрыв {colour.BandingShare:P1}  слипание {colour.MergedShare:P1}  " +
+                $"обрыв {colour.BandingShare:P1}  слипание {colour.MergedShare:P1}  рвань {raggedness.RadPerModule:0.00}  " +
                 $"{watch.ElapsedMilliseconds}мс");
         }
 
