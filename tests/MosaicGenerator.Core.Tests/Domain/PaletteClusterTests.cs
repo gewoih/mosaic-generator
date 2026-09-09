@@ -70,14 +70,24 @@ public class PaletteClusterTests
         var repository = new JsonPaletteRepository("../../../../../src/MosaicGenerator.Web/Data/palettes");
         Assert.True(repository.TryGet("artworker-smalt", out Palette? palette));
 
-        // Measured 2026-09-06: 152 articles, the six whites the largest group. Complete linkage is
-        // more conservative than the single-linkage 136; assert the direction, not an exact count.
+        // Пересъёмка 2026-09-09 (docs/palitra-sverka-po-veeru.md): HEX сняты с фото самой смальты,
+        // а не с фото производителя, где пять белых сливались в один "#FFFFFF" из-за пересвета —
+        // TODO п.19. На реальном фото те же пять артикулов (GX02, VB04, VB05, VB06, VB07) остаются
+        // ближайшими друг к другу во всей палитре (ΔE < 1), но больше не идентичны один в один.
+        // Само число кластеров упало со 136–151 до 131: у настоящей смальты близких пар больше,
+        // чем показывало пересвеченное фото производителя (33 пары с ΔE<3 против прежних, не
+        // считанных отдельно) — это не деградация, а более честные данные.
         Assert.Equal(152, palette!.Colors.Count);
-        Assert.InRange(palette.RepresentativeIndices.Count, 136, 151);
+        Assert.InRange(palette.RepresentativeIndices.Count, 120, 145);
 
-        int white = palette.Colors
+        string[] nearWhites = ["GX02", "VB04", "VB05", "VB06", "VB07"];
+        int[] indices = [.. palette.Colors
             .Select((c, i) => (c, i))
-            .First(x => x.c.Hex.Equals("#FFFFFF", StringComparison.OrdinalIgnoreCase)).i;
-        Assert.True(palette.ClusterOf(white).MemberIndices.Count >= 3);
+            .Where(x => nearWhites.Contains(x.c.Article))
+            .Select(x => x.i)];
+        Assert.Equal(5, indices.Length);
+        Assert.True(
+            palette.ClusterOf(indices[0]).MemberIndices.Count >= 3,
+            "ближайшие белые артикулы больше не образуют группу из хотя бы 3 — переснятые значения разошлись сильнее ожидаемого");
     }
 }
