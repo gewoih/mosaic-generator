@@ -14,6 +14,19 @@
     int arrowMin = 2;
     int arrowMax = Math.Max(stored.ChosenColors, Math.Min(stored.ColorCeiling, stored.ColorsBeforeReduction));
 
+    Palette? currentPalette = Model.Parameters.Palettes
+        .FirstOrDefault(p => string.Equals(p.Id, stored.PaletteId, StringComparison.OrdinalIgnoreCase));
+    string paletteJson = JsonSerializer.Serialize(new
+    {
+        articles = (currentPalette?.Colors ?? []).Select(color => new
+        {
+            article = color.Article,
+            name = color.Name,
+            hex = color.Hex,
+            lab = new[] { color.Lab.L, color.Lab.A, color.Lab.B },
+        }),
+    });
+
     string ladderJson = JsonSerializer.Serialize(new
     {
         chosen = stored.ChosenColors,
@@ -128,7 +141,8 @@
                 <img src="@Url.Action("Legend", new { id })" alt="Легенда: плашки, коды, число кусков" />
                 <div class="tabpanel__bar">
                     <span class="dims">плашка · номер · артикул · число кусков</span>
-                    <a class="button button--small" href="@Url.Action("Legend", new { id, download = true })">Скачать PNG</a>
+                    <a class="button button--small" data-download="legend"
+                       href="@Url.Action("Legend", new { id, download = true })">Скачать PNG</a>
                 </div>
                 <p class="tabpanel__note">Печатать отдельным листом, чтобы не отнимать место у поля мозаики.</p>
             </div>
@@ -137,7 +151,8 @@
                 <img src="@Url.Action("Scheme", new { id })" alt="Схема для разбора раскладки" />
                 <div class="tabpanel__bar">
                     <span class="dims">@stored.SchemeWidthPx × @stored.SchemeHeightPx px · @stored.SchemeDpi.ToString("0", ru) dpi</span>
-                    <a class="button button--small" href="@Url.Action("Scheme", new { id, download = true })">Скачать PNG</a>
+                    <a class="button button--small" data-download="scheme"
+                       href="@Url.Action("Scheme", new { id, download = true })">Скачать PNG</a>
                 </div>
                 <p class="tabpanel__note">Пронумерованная раскладка — для разбора алгоритма, не для набора.</p>
             </div>
@@ -145,8 +160,28 @@
     </div>
 </div>
 
-<section class="consumption">
-    <h2>Расход материала</h2>
+<section class="consumption" data-recolor="@(Model.CanRecolor ? "on" : "off")"
+         data-cartoon-url="@Url.Action("Cartoon", new { id })"
+         data-scheme-url="@Url.Action("Scheme", new { id })"
+         data-legend-url="@Url.Action("Legend", new { id })"
+         data-consumption-url="@Url.Action("Consumption", new { id })"
+         data-cartoon-pdf-url="@Url.Action("CartoonPdf", new { id })"
+         data-scheme-pdf-url="@Url.Action("SchemePdf", new { id })">
+    <div class="consumption__head">
+        <h2>Расход материала</h2>
+        @if (Model.CanRecolor)
+        {
+            <button type="button" class="button button--small" data-recolor-reset hidden>Сбросить замены</button>
+        }
+    </div>
+    @if (Model.CanRecolor)
+    {
+        <p class="consumption__hint">Клик по артикулу — заменить его на другой цвет прямо на картоне.</p>
+    }
+    else
+    {
+        <p class="consumption__hint">Замена цвета на готовом картоне доступна после пересборки макета.</p>
+    }
     <div class="table-scroll">
         <table>
             <thead>
@@ -164,17 +199,26 @@
             <tbody data-consumption-body>
             @foreach (StoredMaterialLine line in stored.Lines)
             {
-                <tr>
+                <tr data-article="@line.Article">
                     <td class="code">@line.Code</td>
                     <td class="hold">
                         <input type="checkbox" form="regenerate" name="PinnedArticles" value="@line.Article"
                                checked="@pinned.Contains(line.Article)"
                                aria-label="Не сворачивать @line.Article" />
                     </td>
-                    <td class="mono">@line.Article</td>
+                    <td class="mono">
+                        @if (Model.CanRecolor)
+                        {
+                            <button type="button" class="swap-open" data-swap-open>@line.Article</button>
+                        }
+                        else
+                        {
+                            @line.Article
+                        }
+                    </td>
                     <td>
                         <span class="dot" style="background:@line.Hex"></span>
-                        @line.Name
+                        <span data-line-name>@line.Name</span>
                     </td>
                     <td class="numeric">@line.ModuleCount.ToString("N0", ru)</td>
                     <td class="numeric">@line.GrossAreaM2.ToString("N3", ru)</td>
@@ -199,7 +243,9 @@
 @section Scripts {
     <script type="application/json" data-layout-data>@Html.Raw(Model.Parameters.LayoutDataJson)</script>
     <script type="application/json" data-color-ladder>@Html.Raw(ladderJson)</script>
+    <script type="application/json" data-palette>@Html.Raw(paletteJson)</script>
     <script src="~/js/layout.js" asp-append-version="true"></script>
     <script src="~/js/crop.js" asp-append-version="true"></script>
     <script src="~/js/ui.js" asp-append-version="true"></script>
+    <script src="~/js/recolor.js" asp-append-version="true"></script>
 }

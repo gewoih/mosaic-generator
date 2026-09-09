@@ -36,4 +36,11 @@ public sealed record ResultViewModel
     public required StoredResult Stored { get; init; }
 
     public required ParametersViewModel Parameters { get; init; }
+
+    /// <summary>
+    /// The geometry needed to swap an article on this result is on disk. False for a result made
+    /// before the swap feature existed, or one whose recolor state has aged out — the page then
+    /// asks for a regeneration instead of offering a swap that silently does nothing.
+    /// </summary>
+    public required bool CanRecolor { get; init; }
 }

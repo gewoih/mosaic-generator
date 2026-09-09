@@ -12,6 +12,7 @@ namespace MosaicGenerator.Web.Services;
 public sealed class TempResultStore : IResultStore
 {
     private const string ManifestFileName = "result.json";
+    private const string RecolorFileName = "recolor.json";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -37,12 +38,14 @@ public sealed class TempResultStore : IResultStore
 
     public string Save(
         StoredResult result,
+        RecolorState recolorState,
         byte[] cartoonPng,
         byte[] schemePng,
         byte[] legendPng,
         IReadOnlyDictionary<int, byte[]> ladderCartoons)
     {
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(recolorState);
         ArgumentNullException.ThrowIfNull(ladderCartoons);
 
         Sweep();
@@ -63,6 +66,10 @@ public sealed class TempResultStore : IResultStore
             Path.Combine(directory, ManifestFileName),
             JsonSerializer.Serialize(result, SerializerOptions));
 
+        File.WriteAllText(
+            Path.Combine(directory, RecolorFileName),
+            JsonSerializer.Serialize(recolorState, SerializerOptions));
+
         return id;
     }
 
@@ -80,6 +87,24 @@ public sealed class TempResultStore : IResultStore
         catch (Exception exception) when (exception is JsonException or IOException)
         {
             _logger.LogWarning(exception, "Stored result {Id} could not be read.", id);
+            return null;
+        }
+    }
+
+    public RecolorState? FindRecolorState(string id)
+    {
+        if (!TryResolve(id, RecolorFileName, out string? path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<RecolorState>(File.ReadAllText(path), SerializerOptions);
+        }
+        catch (Exception exception) when (exception is JsonException or IOException)
+        {
+            _logger.LogWarning(exception, "Recolor state for {Id} could not be read.", id);
             return null;
         }
     }

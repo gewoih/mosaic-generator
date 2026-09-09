@@ -1,5 +1,6 @@
 using MosaicGenerator.Core.Colors;
 using MosaicGenerator.Core.Domain;
+using MosaicGenerator.Core.Grid;
 using MosaicGenerator.Core.Material;
 using MosaicGenerator.Core.Rendering;
 
@@ -89,6 +90,19 @@ public sealed record MosaicResult
 
     /// <summary>Of those, how many are partial — clipped by the field edge or a contour.</summary>
     public required int CutTesseraCount { get; init; }
+
+    /// <summary>
+    /// The tesserae of the field, in the order <see cref="FinalIndices"/> and the render list use.
+    /// Kept so the result page can re-colour an article without re-running the whole pipeline —
+    /// see <see cref="MosaicGenerationService.Recolor"/>.
+    /// </summary>
+    public required IReadOnlyList<Tessera> Tesserae { get; init; }
+
+    /// <summary>
+    /// Palette index per tessera at the chosen shade count, after the settling pass that follows
+    /// the reduction — the base a manual article swap is applied to.
+    /// </summary>
+    public required IReadOnlyList<int> FinalIndices { get; init; }
 }
 
 /// <summary>

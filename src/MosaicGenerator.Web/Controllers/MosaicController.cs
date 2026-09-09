@@ -123,8 +123,15 @@ public sealed class MosaicController(
         Dictionary<int, byte[]> ladderCartoons =
             result.ColorLadder.ToDictionary(rung => rung.ColorCount, rung => rung.CartoonPng);
 
+        var recolorState = new RecolorState
+        {
+            BaseIndices = [.. result.FinalIndices],
+            Tesserae = [.. result.Tesserae],
+        };
+
         string id = results.Save(
             Describe(result, form, palette, choice, sourceId!),
+            recolorState,
             result.CartoonPng, result.SchemePng, result.LegendPng, ladderCartoons);
 
         logger.LogInformation(
@@ -182,12 +189,20 @@ public sealed class MosaicController(
             Id = id,
             Stored = stored,
             Parameters = BuildParameters(FormFrom(stored)),
+            CanRecolor = results.FindRecolorState(id) is not null,
         });
     }
 
     [HttpGet("result/{id}/cartoon.png")]
-    public IActionResult Cartoon(string id, int? c = null, bool download = false)
+    public IActionResult Cartoon(string id, int? c = null, bool download = false, string? swaps = null)
     {
+        if (Recolored(id, swaps) is { } recolored)
+        {
+            return download
+                ? File(recolored.CartoonPng, "image/png", "karton.png")
+                : File(recolored.CartoonPng, "image/png");
+        }
+
         // A shade count the arrows stepped to within the baked range — serve that cartoon straight
         // from the temp folder. Anything else falls through to the one the page was generated at.
         if (c is { } colors)
@@ -203,8 +218,134 @@ public sealed class MosaicController(
     }
 
     [HttpGet("result/{id}/scheme.png")]
-    public IActionResult Scheme(string id, bool download = false) =>
-        Image(id, ResultImage.Scheme, download, "shema.png");
+    public IActionResult Scheme(string id, bool download = false, string? swaps = null)
+    {
+        if (Recolored(id, swaps) is { } recolored)
+        {
+            return download
+                ? File(recolored.SchemePng, "image/png", "shema.png")
+                : File(recolored.SchemePng, "image/png");
+        }
+
+        return Image(id, ResultImage.Scheme, download, "shema.png");
+    }
+
+    /// <summary>
+    /// The material table after a manual article swap, so the result page can refresh the numbers
+    /// without a full round trip. No swaps given — the stored table is already on the page.
+    /// </summary>
+    [HttpGet("result/{id}/consumption.json")]
+    public IActionResult Consumption(string id, string? swaps = null)
+    {
+        if (Recolored(id, swaps) is not { } recolored)
+        {
+            return NoContent();
+        }
+
+        MaterialReport report = recolored.Report;
+        return Json(new
+        {
+            lines = report.Lines.Select(line => new
+            {
+                code = line.Code,
+                article = line.Color.Article,
+                name = line.Color.Name,
+                hex = line.Color.Hex,
+                count = line.ModuleCount,
+                area = line.GrossAreaM2,
+                mass = line.MassKg,
+                cost = line.Cost,
+            }),
+            totalArea = report.TotalGrossAreaM2,
+            totalMass = report.TotalMassKg,
+            totalCost = report.TotalCost,
+            totalModules = report.TotalModules,
+        });
+    }
+
+    /// <summary>
+    /// Applies <paramref name="swaps"/> (<c>FROM:TO,FROM:TO</c> by article) to the stored layout
+    /// and redraws it. Null, empty, or unusable state — returns null and the caller serves what was
+    /// stored.
+    /// </summary>
+    private RecolorResult? Recolored(string id, string? swaps)
+    {
+        Dictionary<string, string> map = ParseSwaps(swaps);
+        if (map.Count == 0)
+        {
+            return null;
+        }
+
+        StoredResult? stored = results.Find(id);
+        RecolorState? state = results.FindRecolorState(id);
+        if (stored is null || state is null || !palettes.TryGet(stored.PaletteId, out Palette? palette))
+        {
+            return null;
+        }
+
+        var articleToIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < palette.Colors.Count; i++)
+        {
+            articleToIndex[palette.Colors[i].Article] = i;
+        }
+
+        var indexSwaps = new Dictionary<int, int>();
+        foreach ((string from, string to) in map)
+        {
+            if (articleToIndex.TryGetValue(from, out int fromIndex)
+                && articleToIndex.TryGetValue(to, out int toIndex)
+                && fromIndex != toIndex)
+            {
+                indexSwaps[fromIndex] = toIndex;
+            }
+        }
+
+        if (indexSwaps.Count == 0)
+        {
+            return null;
+        }
+
+        var layoutRequest = new MosaicRequest
+        {
+            PanelWidthMm = stored.PanelWidthMm,
+            PanelHeightMm = stored.PanelHeightMm,
+            ModuleWidthMm = stored.ModuleSizeMm,
+            ModuleHeightMm = stored.ModuleAcrossMm,
+            GroutWidthMm = stored.GroutWidthMm,
+            PaletteId = stored.PaletteId,
+        };
+
+        return generator.Recolor(new RecolorRequest
+        {
+            Layout = MosaicLayout.Compute(layoutRequest),
+            Palette = palette,
+            Tesserae = state.Tesserae,
+            BaseIndices = state.BaseIndices,
+            Swaps = indexSwaps,
+            WasteFactor = 1.0 + (stored.WastePercent / 100.0),
+            PricePerKgRub = stored.PricePerKgRub,
+        });
+    }
+
+    private static Dictionary<string, string> ParseSwaps(string? swaps)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(swaps))
+        {
+            return map;
+        }
+
+        foreach (string pair in swaps.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string[] parts = pair.Split(':', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length == 2 && parts[0].Length > 0 && parts[1].Length > 0)
+            {
+                map[parts[0]] = parts[1];
+            }
+        }
+
+        return map;
+    }
 
     /// <summary>
     /// The cartoon laid across A4 pages for 1:1 printing: a panel wider than a sheet is cut, and
@@ -212,9 +353,10 @@ public sealed class MosaicController(
     /// <see cref="Cartoon"/>.
     /// </summary>
     [HttpGet("result/{id}/cartoon.pdf")]
-    public IActionResult CartoonPdf(string id, int? c = null)
+    public IActionResult CartoonPdf(string id, int? c = null, string? swaps = null)
     {
-        byte[]? png = c is { } colors ? results.ReadLadderCartoon(id, colors) : null;
+        byte[]? png = Recolored(id, swaps)?.CartoonPng;
+        png ??= c is { } colors ? results.ReadLadderCartoon(id, colors) : null;
         png ??= results.ReadImage(id, ResultImage.Cartoon);
 
         return png is null
@@ -223,9 +365,9 @@ public sealed class MosaicController(
     }
 
     [HttpGet("result/{id}/scheme.pdf")]
-    public IActionResult SchemePdf(string id)
+    public IActionResult SchemePdf(string id, string? swaps = null)
     {
-        byte[]? png = results.ReadImage(id, ResultImage.Scheme);
+        byte[]? png = Recolored(id, swaps)?.SchemePng ?? results.ReadImage(id, ResultImage.Scheme);
 
         return png is null
             ? NotFound()
@@ -233,8 +375,17 @@ public sealed class MosaicController(
     }
 
     [HttpGet("result/{id}/legend.png")]
-    public IActionResult Legend(string id, bool download = false) =>
-        Image(id, ResultImage.Legend, download, "legenda.png");
+    public IActionResult Legend(string id, bool download = false, string? swaps = null)
+    {
+        if (Recolored(id, swaps) is { } recolored)
+        {
+            return download
+                ? File(recolored.LegendPng, "image/png", "legenda.png")
+                : File(recolored.LegendPng, "image/png");
+        }
+
+        return Image(id, ResultImage.Legend, download, "legenda.png");
+    }
 
     private IActionResult Image(string id, ResultImage image, bool download, string fileName)
     {

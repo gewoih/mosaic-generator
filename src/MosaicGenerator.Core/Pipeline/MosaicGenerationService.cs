@@ -83,6 +83,8 @@ public sealed class MosaicGenerationService(
 
         return new MosaicResult
         {
+            Tesserae = context.Tesserae,
+            FinalIndices = main.FinalIndices,
             CartoonPng = main.CartoonPng,
             SchemePng = main.SchemePng!,
             LegendPng = main.LegendPng!,
@@ -238,6 +240,7 @@ public sealed class MosaicGenerationService(
                 CartoonSheetHeightPx = sheetHeight,
                 Cartoon = cartoonGeometry,
                 Report = report,
+                FinalIndices = finalIndices,
                 SettledAfterReduction = settledAfterReduction,
                 SettledAfterReductionOnMoved = settledAfterReductionOnMoved,
             };
@@ -251,12 +254,62 @@ public sealed class MosaicGenerationService(
             CartoonSheetHeightPx = sheetHeight,
             Cartoon = cartoonGeometry,
             Report = report,
+            FinalIndices = finalIndices,
             Scheme = schemeGeometry,
             SchemePng = _renderer.RenderScheme(schemeGeometry, report),
             LegendPng = _renderer.RenderLegend(report),
             SettledAfterReduction = settledAfterReduction,
             SettledAfterReductionOnMoved = settledAfterReductionOnMoved,
         };
+    }
+
+    /// <summary>
+    /// Re-renders the layout with one or more articles swapped for others, without re-running the
+    /// pipeline: the tesserae and the chosen mapping are taken as given, only the palette index on
+    /// the affected cells changes. This is the result page's manual override — the mosaicist looks
+    /// at the cartoon and says "this cream should be that one". A pure re-colour: geometry, courses
+    /// and the scheme's numbering are untouched.
+    /// </summary>
+    public RecolorResult Recolor(RecolorRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        int[] indices = new int[request.BaseIndices.Count];
+        for (int cell = 0; cell < indices.Length; cell++)
+        {
+            indices[cell] = ResolveSwap(request.Swaps, request.BaseIndices[cell]);
+        }
+
+        var plan = new MosaicPlan(request.Layout, request.Palette, indices, request.Tesserae);
+        MaterialReport report = MaterialCalculator.Calculate(
+            plan, request.WasteFactor, request.PricePerKgRub);
+
+        RenderPlan cartoonGeometry = RenderGeometry.Compute(plan, _options.Cartoon);
+        RenderPlan schemeGeometry = RenderGeometry.Compute(plan, _options.Scheme);
+
+        return new RecolorResult
+        {
+            CartoonPng = _renderer.RenderCartoon(cartoonGeometry),
+            SchemePng = _renderer.RenderScheme(schemeGeometry, report),
+            LegendPng = _renderer.RenderLegend(report),
+            CartoonSheetHeightPx = CartoonSheet.Layout(cartoonGeometry).HeightPx,
+            Report = report,
+        };
+    }
+
+    /// <summary>
+    /// Follows a chain of swaps to its end (X→Y, then Y→Z gives X→Z), stopping on a cycle so a
+    /// malformed map cannot spin.
+    /// </summary>
+    private static int ResolveSwap(IReadOnlyDictionary<int, int> swaps, int index)
+    {
+        int guard = 0;
+        while (swaps.TryGetValue(index, out int next) && next != index && guard++ < 64)
+        {
+            index = next;
+        }
+
+        return index;
     }
 
     /// <summary>
@@ -317,6 +370,8 @@ public sealed class MosaicGenerationService(
         public required RenderPlan Cartoon { get; init; }
 
         public required MaterialReport Report { get; init; }
+
+        public required int[] FinalIndices { get; init; }
 
         public RenderPlan? Scheme { get; init; }
 

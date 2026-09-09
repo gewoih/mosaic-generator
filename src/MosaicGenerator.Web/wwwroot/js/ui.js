@@ -144,6 +144,7 @@
             body.textContent = '';
             rung.lines.forEach(function (line) {
                 var tr = document.createElement('tr');
+                tr.dataset.article = line.hold;
 
                 tr.appendChild(cell(line.code, 'code'));
 
@@ -159,14 +160,29 @@
                 hold.appendChild(box);
                 tr.appendChild(hold);
 
-                tr.appendChild(cell(line.hold, 'mono'));
+                var mono = document.createElement('td');
+                mono.className = 'mono';
+                if (document.querySelector('[data-recolor="on"]')) {
+                    var open = document.createElement('button');
+                    open.type = 'button';
+                    open.className = 'swap-open';
+                    open.setAttribute('data-swap-open', '');
+                    open.textContent = line.hold;
+                    mono.appendChild(open);
+                } else {
+                    mono.textContent = line.hold;
+                }
+                tr.appendChild(mono);
 
                 var name = document.createElement('td');
                 var dot = document.createElement('span');
                 dot.className = 'dot';
                 dot.style.background = line.hex;
                 name.appendChild(dot);
-                name.appendChild(document.createTextNode(' ' + line.name));
+                var nameText = document.createElement('span');
+                nameText.setAttribute('data-line-name', '');
+                nameText.textContent = ' ' + line.name;
+                name.appendChild(nameText);
                 tr.appendChild(name);
 
                 tr.appendChild(cell(fmt0.format(line.count), 'numeric'));
